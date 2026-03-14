@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4] — 2026-03-14
+
+### Fixed
+- CI: use `NPM_TOKEN` secret for npm authentication with `--provenance` attestation
+
+---
+
 ## [1.1.3] — 2026-03-14
 
 ### Fixed
