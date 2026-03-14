@@ -1,0 +1,26 @@
+{
+  "name": "figma-ui-mcp",
+  "version": "1.0.0",
+  "description": "Bidirectional Figma MCP — draw UI with Claude, read design back to code",
+  "type": "module",
+  "bin": {
+    "figma-ui-mcp": "./server/index.js"
+  },
+  "files": [
+    "server/",
+    "plugin/"
+  ],
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "engines": { "node": ">=18" },
+  "keywords": ["figma", "mcp", "model-context-protocol", "claude", "ai", "design", "plugin"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TranHoaiHung/figma-ui-mcp"
+  }
+}

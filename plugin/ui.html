@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Figma UI MCP Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      background: #1e1e2e; color: #cdd6f4;
+      padding: 16px; width: 300px; font-size: 12px;
+    }
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    header svg { flex-shrink: 0; }
+    header h1 { font-size: 13px; font-weight: 600; color: #cba6f7; }
+    header p  { font-size: 10px; color: #6c7086; margin-top: 1px; }
+
+    /* Status bar */
+    .status-bar {
+      display: flex; align-items: center; gap: 8px;
+      background: #181825; border: 1px solid #313244;
+      border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.green  { background: #a6e3a1; box-shadow: 0 0 6px #a6e3a166; }
+    .dot.red    { background: #f38ba8; }
+    .dot.yellow { background: #f9e2af; animation: blink 1s ease infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+    .status-label { font-size: 11px; flex: 1; }
+    .badge {
+      font-size: 9px; padding: 2px 6px; border-radius: 4px;
+      background: #313244; color: #6c7086;
+    }
+
+    /* Stats */
+    .stats { display: flex; gap: 8px; margin-bottom: 12px; }
+    .stat {
+      flex: 1; background: #181825; border: 1px solid #313244;
+      border-radius: 8px; padding: 8px; text-align: center;
+    }
+    .stat .n { font-size: 18px; font-weight: 700; color: #cdd6f4; }
+    .stat .l { font-size: 9px; color: #6c7086; margin-top: 2px; }
+
+    /* Log */
+    .log-wrap { margin-bottom: 10px; }
+    .log-label { font-size: 10px; color: #6c7086; margin-bottom: 4px; }
+    .log {
+      background: #11111b; border: 1px solid #313244; border-radius: 8px;
+      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 10px; padding: 8px; height: 150px;
+      overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+      color: #585b70;
+    }
+    .log .ok   { color: #a6e3a1; }
+    .log .err  { color: #f38ba8; }
+    .log .info { color: #89b4fa; }
+    .log .warn { color: #f9e2af; }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 6px; }
+    button {
+      flex: 1; padding: 7px; border-radius: 6px; font-size: 11px;
+      font-weight: 500; cursor: pointer; border: 1px solid #313244;
+      background: #181825; color: #cdd6f4; transition: background .15s;
+    }
+    button:hover { background: #313244; }
+    button.primary { background: #cba6f7; color: #1e1e2e; border-color: transparent; }
+    button.primary:hover { background: #b794e8; }
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="8" fill="#313244"/>
+      <rect x="7" y="7" width="6" height="9" rx="3" fill="#cba6f7"/>
+      <rect x="15" y="7" width="6" height="6" rx="3" fill="#89b4fa"/>
+      <rect x="15" y="15" width="6" height="6" rx="3" fill="#a6e3a1"/>
+      <rect x="7" y="18" width="6" height="3" rx="1.5" fill="#f9e2af"/>
+    </svg>
+    <div>
+      <h1>Figma UI MCP</h1>
+      <p>Bidirectional design bridge · port 38451</p>
+    </div>
+  </header>
+
+  <div class="status-bar">
+    <div class="dot yellow" id="dot"></div>
+    <span class="status-label" id="status-text">Connecting to MCP server...</span>
+    <span class="badge" id="mode-badge">—</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="write-count">0</div><div class="l">Writes</div></div>
+    <div class="stat"><div class="n" id="read-count">0</div><div class="l">Reads</div></div>
+    <div class="stat"><div class="n" id="err-count">0</div><div class="l">Errors</div></div>
+  </div>
+
+  <div class="log-wrap">
+    <div class="log-label">Activity log</div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="btn-row">
+    <button onclick="clearLog()">Clear log</button>
+    <button class="primary" onclick="reconnect()">Reconnect</button>
+  </div>
+
+  <script>
+    const BRIDGE = "http://localhost:38451";
+    const POLL_MS = 900;
+
+    let writeCount = 0, readCount = 0, errCount = 0;
+    let polling = true;
+
+    const logEl    = document.getElementById("log");
+    const dotEl    = document.getElementById("dot");
+    const statusEl = document.getElementById("status-text");
+    const modeEl   = document.getElementById("mode-badge");
+
+    function setStatus(state, text, mode) {
+      dotEl.className = "dot " + state;
+      statusEl.textContent = text;
+      if (mode) modeEl.textContent = mode;
+    }
+
+    function log(msg, cls = "") {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      const ts = new Date().toLocaleTimeString("en", { hour12: false });
+      line.textContent = `${ts}  ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+      while (logEl.children.length > 300) logEl.removeChild(logEl.firstChild);
+    }
+
+    function clearLog() { logEl.innerHTML = ""; }
+
+    function reconnect() {
+      polling = false;
+      setTimeout(() => { polling = true; poll(); }, 100);
+    }
+
+    async function sendResponse(id, success, data, error) {
+      try {
+        await fetch(`${BRIDGE}/response`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, success, data: data ?? null, error: error ?? null }),
+        });
+      } catch (e) {
+        log("Failed to send response: " + e.message, "err");
+      }
+    }
+
+    function dispatchToMain(request) {
+      parent.postMessage({ pluginMessage: request }, "*");
+    }
+
+    async function poll() {
+      while (polling) {
+        try {
+          const res = await fetch(`${BRIDGE}/poll`, { signal: AbortSignal.timeout(3000) });
+          if (!res.ok) { setStatus("red", "Bridge server unreachable"); await sleep(POLL_MS); continue; }
+
+          const { requests, mode } = await res.json();
+          setStatus("green", `Connected — ${requests.length ? requests.length + " cmd(s)" : "idle"}`, mode || "ready");
+
+          for (const req of requests) {
+            const isRead = ["get_selection","get_design","get_page_nodes","screenshot","to_code"].includes(req.operation);
+            log(`→ ${req.operation}`, isRead ? "info" : "ok");
+            dispatchToMain(req);
+          }
+        } catch {
+          setStatus("red", "Cannot reach MCP server on :38451");
+        }
+        await sleep(POLL_MS);
+      }
+    }
+
+    // Receive results from plugin main thread (code.js)
+    window.onmessage = async (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+
+      const isRead = ["get_selection","get_design","get_page_nodes","screenshot","to_code"].includes(msg.operation);
+
+      if (msg.success) {
+        if (isRead) { readCount++; document.getElementById("read-count").textContent = readCount; }
+        else        { writeCount++; document.getElementById("write-count").textContent = writeCount; }
+        log(`✓ ${msg.id?.slice(-6)}`, "ok");
+      } else {
+        errCount++;
+        document.getElementById("err-count").textContent = errCount;
+        log(`✗ ${msg.id?.slice(-6)}: ${msg.error}`, "err");
+      }
+      await sendResponse(msg.id, msg.success, msg.data, msg.error);
+    };
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    poll();
+  </script>
+</body>
+</html>
