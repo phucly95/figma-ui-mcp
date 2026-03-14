@@ -17,8 +17,13 @@
     "@modelcontextprotocol/sdk": "^1.0.4"
   },
   "engines": { "node": ">=18" },
-  "keywords": ["figma", "mcp", "model-context-protocol", "claude", "ai", "design", "plugin"],
+  "keywords": ["figma", "mcp", "model-context-protocol", "claude", "ai", "design", "plugin", "figma-plugin", "ui-generation"],
   "license": "MIT",
+  "author": "TranHoaiHung",
+  "homepage": "https://github.com/TranHoaiHung/figma-ui-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/TranHoaiHung/figma-ui-mcp/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/TranHoaiHung/figma-ui-mcp"
