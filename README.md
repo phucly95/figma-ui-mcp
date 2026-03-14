@@ -206,6 +206,14 @@ figma-ui-mcp/
 }
 ```
 
+## Star History
+
+If **figma-ui-mcp** helps you, please give it a star — it helps others discover the project!
+
+[![GitHub stars](https://img.shields.io/github/stars/TranHoaiHung/figma-ui-mcp?style=social)](https://github.com/TranHoaiHung/figma-ui-mcp/stargazers)
+
+[![Star History Chart](https://api.star-history.com/svg?repos=TranHoaiHung/figma-ui-mcp&type=Date)](https://star-history.com/#TranHoaiHung/figma-ui-mcp&Date)
+
 ---
 
 ## License
@@ -215,11 +223,3 @@ figma-ui-mcp/
 MIT © [TranHoaiHung](https://github.com/TranHoaiHung) — free to use, modify, and distribute. See [LICENSE](LICENSE) for details.
 
 ---
-
-## Star History
-
-If **figma-ui-mcp** helps you, please give it a star — it helps others discover the project!
-
-[![GitHub stars](https://img.shields.io/github/stars/TranHoaiHung/figma-ui-mcp?style=social)](https://github.com/TranHoaiHung/figma-ui-mcp/stargazers)
-
-[![Star History Chart](https://api.star-history.com/svg?repos=TranHoaiHung/figma-ui-mcp&type=Date)](https://star-history.com/#TranHoaiHung/figma-ui-mcp&Date)
