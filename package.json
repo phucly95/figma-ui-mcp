@@ -1,14 +1,22 @@
 {
   "name": "figma-ui-mcp",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Bidirectional Figma MCP — draw UI with Claude, read design back to code",
   "type": "module",
   "bin": {
     "figma-ui-mcp": "./server/index.js"
   },
   "files": [
-    "server/",
-    "plugin/"
+    "server/index.js",
+    "server/bridge-server.js",
+    "server/code-executor.js",
+    "server/tool-definitions.js",
+    "server/api-docs.js",
+    "plugin/code.js",
+    "plugin/manifest.json",
+    "plugin/ui.html",
+    "plugin/icon16.png",
+    "plugin/icon32.png"
   ],
   "scripts": {
     "start": "node server/index.js"

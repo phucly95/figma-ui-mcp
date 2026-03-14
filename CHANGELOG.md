@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2] — 2026-03-14
+
+### Fixed
+- `package.json` `files` field now lists explicit files instead of whole `server/` directory — prevents `server/node_modules/` from being bundled into the npm package (was 2.9 MB / 3499 files, now 22 kB / 13 files)
+- Add `.npmignore` to exclude `assets/`, `.github/`, `CHANGELOG.md` from npm tarball
+
+---
+
 ## [1.1.1] — 2026-03-14
 
 ### Changed
