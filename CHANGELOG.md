@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3] — 2026-03-14
+
+### Fixed
+- CI: remove `registry-url` from `setup-node` — was auto-injecting `GITHUB_TOKEN` as `NODE_AUTH_TOKEN`, blocking npm OIDC Trusted Publishing flow
+- CI: manually configure npm registry with empty token so npm CLI uses OIDC exchange
+
+---
+
 ## [1.1.2] — 2026-03-14
 
 ### Fixed

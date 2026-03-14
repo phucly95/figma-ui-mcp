@@ -23,10 +23,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          # Do NOT set registry-url here — setup-node would inject GITHUB_TOKEN
+          # as NODE_AUTH_TOKEN, which overrides npm OIDC Trusted Publishing flow
 
       - name: Install dependencies
         run: npm install
+
+      # Configure npm registry without injecting any auth token —
+      # npm CLI will obtain an OIDC token automatically via id-token: write permission
+      - name: Configure npm registry
+        run: |
+          echo "//registry.npmjs.org/:_authToken=" >> ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
 
       # ── Read local version ─────────────────────────────────────────────────
       - name: Get package version
