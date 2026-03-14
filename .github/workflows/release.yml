@@ -4,8 +4,10 @@ on:
   push:
     branches: [main]
 
+# Required for Trusted Publishing (OIDC) and creating releases/tags
 permissions:
-  contents: write  # needed to create tags and GitHub releases
+  contents: write   # create tags + GitHub releases
+  id-token: write   # OIDC token for npm Trusted Publishing
 
 jobs:
   release:
@@ -15,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history needed for tag check
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -31,7 +33,7 @@ jobs:
         id: pkg
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      # ── Check if this version was already published to npm ─────────────────
+      # ── Compare with npm registry — skip if already published ──────────────
       - name: Check npm registry
         id: check
         run: |
@@ -39,20 +41,19 @@ jobs:
           echo "published=$PUBLISHED" >> $GITHUB_OUTPUT
           if [ "$PUBLISHED" = "${{ steps.pkg.outputs.version }}" ]; then
             echo "skip=true"  >> $GITHUB_OUTPUT
-            echo "⏭  v${{ steps.pkg.outputs.version }} already on npm — skipping release."
+            echo "⏭  v${{ steps.pkg.outputs.version }} already on npm — skipping."
           else
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "🚀 New version v${{ steps.pkg.outputs.version }} (npm has $PUBLISHED) — will release."
+            echo "🚀 New version v${{ steps.pkg.outputs.version }} (npm has $PUBLISHED) — releasing."
           fi
 
-      # ── Publish to npm ─────────────────────────────────────────────────────
+      # ── Publish to npm via Trusted Publishing (OIDC — no token needed) ─────
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
+        # NODE_AUTH_TOKEN is intentionally omitted — OIDC handles auth via id-token permission
 
-      # ── Create git tag ─────────────────────────────────────────────────────
+      # ── Tag the commit ─────────────────────────────────────────────────────
       - name: Create git tag
         if: steps.check.outputs.skip == 'false'
         run: |
@@ -61,19 +62,17 @@ jobs:
           git tag "v${{ steps.pkg.outputs.version }}"
           git push origin "v${{ steps.pkg.outputs.version }}"
 
-      # ── Extract changelog section for this version ─────────────────────────
+      # ── Extract this version's section from CHANGELOG.md ───────────────────
       - name: Extract changelog
         if: steps.check.outputs.skip == 'false'
         id: changelog
         run: |
           VERSION="${{ steps.pkg.outputs.version }}"
-          # Extract the block between ## [VERSION] and the next ## [
-          NOTES=$(awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-          # Write to file to preserve newlines
-          echo "$NOTES" > /tmp/release-notes.md
-          echo "Release notes extracted for v$VERSION"
+          awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md \
+            > /tmp/release-notes.md
+          cat /tmp/release-notes.md
 
-      # ── Create GitHub Release ──────────────────────────────────────────────
+      # ── Create GitHub Release with changelog notes ─────────────────────────
       - name: Create GitHub Release
         if: steps.check.outputs.skip == 'false'
         env:
