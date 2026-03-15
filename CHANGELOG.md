@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0] — 2026-03-15
+
+### Added
+- **`figma.loadImage(url, opts)`** — download image from URL server-side, convert to base64, create IMAGE node on canvas (supports `scaleMode`, `cornerRadius`, up to 5MB)
+- **`figma.loadIcon(name, opts)`** — fetch SVG icon with auto fallback chain: Fluent UI → Bootstrap → Phosphor → Lucide; auto-detects fill vs stroke and applies color
+- **`figma.loadIconIn(name, opts)`** — icon inside a centered circle background with configurable `containerSize`, `fill`, `bgOpacity`
+- **`httpFetch()` helper** — server-side HTTP/HTTPS fetcher with redirect following (up to 3), size limits, and timeout (15s)
+- Icon library config supporting 4 icon sources with fill-type detection
+
+### Changed
+- `code-executor.js` — sandbox timeout increased from 10s to 30s (needed for image/icon downloads)
+- `CLAUDE.md` — updated API reference with `loadImage`, `loadIcon`, `loadIconIn` docs and examples
+
+---
+
 ## [1.3.0] — 2026-03-15
 
 ### Added

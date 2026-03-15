@@ -94,6 +94,9 @@ WRONG:    back btn → title → content → image (image covers all!)
 ```js
 await figma.ensure_library()       // create/get Design Library frame
 await figma.get_library_tokens()   // read color + text tokens
+await figma.loadImage(url, opts)   // download image → create IMAGE node
+await figma.loadIcon(name, opts)   // fetch SVG icon → create SVG node (auto fallback chain)
+await figma.loadIconIn(name, opts) // icon inside centered circle bg
 await figma.get_selection()        // read user's Figma selection
 await figma.get_page_nodes()       // list all top-level frames
 await figma.create({ type, name, parentId, x, y, width, height, fill, ... })
@@ -237,10 +240,41 @@ icon paddingTop = (textLineHeight - iconSize) / 2
 Example: text 22px line-height, dot 8px → paddingTop = (22 - 8) / 2 = 7
 ```
 
-## Images
-Use `type: "IMAGE"` with `imageData` param (base64-encoded PNG/JPG).
-Optional: `scaleMode` ("FILL"|"FIT"|"CROP"|"TILE"), `cornerRadius`.
-Max payload ~5MB (bridge limit). Use smaller images when possible.
+## Images & Icons (Server-side helpers — NO bash/curl needed)
+
+### figma.loadImage(url, opts) — Download image and place on canvas
+```js
+// Thumbnail image
+await figma.loadImage("https://images.unsplash.com/photo-xxx?w=440&h=248&fit=crop", {
+  parentId: frame.id, x: 0, y: 0, width: 440, height: 248,
+  name: "hero-image", scaleMode: "FILL"
+});
+
+// Circular avatar
+await figma.loadImage("https://images.unsplash.com/photo-xxx?w=48&h=48&fit=crop", {
+  parentId: row.id, width: 32, height: 32,
+  name: "avatar", cornerRadius: 16, scaleMode: "FILL"
+});
+```
+
+### figma.loadIcon(name, opts) — Fetch SVG icon (auto fallback: Fluent → Bootstrap → Phosphor → Lucide)
+```js
+await figma.loadIcon("chevron-left", { parentId: header.id, x: 16, y: 16, size: 22, fill: "#FFFFFF" });
+await figma.loadIcon("bookmark",     { parentId: header.id, x: 398, y: 16, size: 22, fill: "#1E3150" });
+await figma.loadIcon("play",         { parentId: btn.id, size: 24, fill: "#FFFFFF" });
+```
+
+### figma.loadIconIn(name, opts) — Icon inside centered circle background
+```js
+// 40px circle with jade bg at 10% opacity, 20px icon inside centered
+await figma.loadIconIn("check", {
+  parentId: card.id, containerSize: 40, fill: "#00B894", bgOpacity: 0.1
+});
+```
+
+### Legacy (still works but prefer helpers above)
+`type: "IMAGE"` with `imageData` (base64) — use only when you already have base64 data.
+`type: "SVG"` with `svg` string — use only when you have custom SVG markup.
 
 ## AUTO LAYOUT (PREFERRED for centering — NON-NEGOTIABLE for complex containers)
 
