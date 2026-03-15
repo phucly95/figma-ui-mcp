@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0] — 2026-03-15
+
+### Added
+- **SVG node type** — `type: "SVG"` with `svg` param; auto-detects fill vs stroke icons (Lucide, Phosphor, etc.) and applies color correctly
+- **IMAGE node type** — `type: "IMAGE"` with base64 `imageData` param; supports `scaleMode` (FILL/FIT/CROP/TILE) and `cornerRadius`
+- **Auto Layout** — full support on `create` and `modify`:
+  - `layoutMode` (HORIZONTAL/VERTICAL), `primaryAxisAlignItems`, `counterAxisAlignItems`
+  - Uniform/axis/individual padding, `itemSpacing`
+  - `primaryAxisSizingMode`, `counterAxisSizingMode`, `clipsContent`
+  - Child properties: `layoutAlign`, `layoutGrow`
+- **Fill opacity** — `fillOpacity` param on FRAME, RECTANGLE, ELLIPSE
+- **Text alignment** — `textAlignHorizontal`, `textAlignVertical`, `textAutoResize` params
+
+### Changed
+- `bridge-server.js` — `MAX_BODY_BYTES` increased from 500 KB to 5 MB to support image payloads
+
+---
+
 ## [1.1.4] — 2026-03-14
 
 ### Fixed

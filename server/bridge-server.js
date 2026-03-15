@@ -5,7 +5,7 @@ export const CONFIG = {
   PORT: 38451,
   HOST: null,               // null = Node.js binds :: (dual-stack IPv4+IPv6), accepts localhost on both
   OP_TIMEOUT_MS: 10_000,    // per-operation timeout
-  MAX_BODY_BYTES: 500_000,
+  MAX_BODY_BYTES: 5_000_000,  // 5MB to support image payloads
   MAX_QUEUE: 50,
   HEALTH_TTL_MS: 15_000,    // plugin considered offline after 15s without poll
 };
