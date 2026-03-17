@@ -123,10 +123,44 @@ function hasImageFill(node) {
   return false;
 }
 
-// Recursively extract design data from a node tree (enhanced v1.6.0)
-function extractDesignTree(node, depth) {
+// Collect all text content from a subtree (for truncated nodes summary)
+function collectTextContent(node, maxItems) {
+  if (!maxItems) maxItems = 10;
+  var texts = [];
+  function walk(n) {
+    if (texts.length >= maxItems) return;
+    if (n.type === "TEXT") {
+      var t = n.characters;
+      if (t && t.trim()) texts.push(t.trim().substring(0, 60));
+    }
+    if ("children" in n) {
+      for (var i = 0; i < n.children.length; i++) walk(n.children[i]);
+    }
+  }
+  walk(node);
+  return texts;
+}
+
+// Collect icon names from a subtree
+function collectIconNames(node, maxItems) {
+  if (!maxItems) maxItems = 10;
+  var icons = [];
+  function walk(n) {
+    if (icons.length >= maxItems) return;
+    if (isLikelyIcon(n)) icons.push(n.name);
+    if ("children" in n) {
+      for (var i = 0; i < n.children.length; i++) walk(n.children[i]);
+    }
+  }
+  walk(node);
+  return icons;
+}
+
+// Recursively extract design data from a node tree (enhanced v1.6.2)
+function extractDesignTree(node, depth, maxDepth) {
   if (depth === undefined) depth = 0;
-  if (depth > 8) return null;
+  if (maxDepth === undefined) maxDepth = 15;
+  if (depth > maxDepth) return null;
 
   var info = {
     id:    node.id,
@@ -322,9 +356,18 @@ function extractDesignTree(node, depth) {
 
   // ── Children ──
   if ("children" in node && node.children.length) {
-    info.children = node.children
-      .map(function(c) { return extractDesignTree(c, depth + 1); })
-      .filter(Boolean);
+    if (depth >= maxDepth) {
+      // At depth limit: summarize instead of truncating to empty []
+      info.childCount = node.children.length;
+      var texts = collectTextContent(node, 15);
+      if (texts.length) info.textContent = texts;
+      var icons = collectIconNames(node, 10);
+      if (icons.length) info.iconNames = icons;
+    } else {
+      info.children = node.children
+        .map(function(c) { return extractDesignTree(c, depth + 1, maxDepth); })
+        .filter(Boolean);
+    }
   }
 
   return info;
@@ -912,25 +955,34 @@ handlers.get_selection = async function(params) {
 
   if (!nodes.length) return { nodes: [], message: "Nothing selected" };
 
+  var maxDepth = (params && params.depth !== undefined) ? (params.depth === "full" ? 50 : Number(params.depth)) : 15;
   return {
-    nodes: nodes.map(n => extractDesignTree(n)),
-    tokens: nodes.length === 1 ? extractTokens(extractDesignTree(nodes[0])) : null,
+    nodes: nodes.map(function(n) { return extractDesignTree(n, 0, maxDepth); }),
+    tokens: nodes.length === 1 ? extractTokens(extractDesignTree(nodes[0], 0, maxDepth)) : null,
   };
 };
 
-// get_design — full page node tree (limited depth)
-handlers.get_design = async ({ id, name, depth = 4 } = {}) => {
-  let root;
+// get_design — full node tree with configurable depth
+// depth: number (default 10) or "full" for unlimited
+handlers.get_design = async function(params) {
+  var p = params || {};
+  var id = p.id, name = p.name;
+  var depthParam = p.depth !== undefined ? p.depth : 10;
+
+  var root;
   if (id)   root = findNodeById(id);
   else if (name) root = findNodeByName(name);
   else      root = figma.currentPage;
 
   if (!root) throw new Error("Node not found: id=" + (id || "none") + " name=" + (name || "none"));
 
+  var maxDepth = (depthParam === "full") ? 50 : Number(depthParam);
+  if (isNaN(maxDepth) || maxDepth < 1) maxDepth = 10;
+
   try {
-    const tree = extractDesignTree(root, 8 - depth);
-    const tokens = extractTokens(tree);
-    return { tree, tokens };
+    var tree = extractDesignTree(root, 0, maxDepth);
+    var tokens = extractTokens(tree);
+    return { tree: tree, tokens: tokens, meta: { maxDepth: maxDepth, nodeType: root.type } };
   } catch(e) {
     throw new Error("[get_design] " + e.message + " nodeType=" + root.type + " id=" + root.id);
   }

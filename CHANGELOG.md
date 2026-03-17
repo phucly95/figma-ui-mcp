@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.3] — 2026-03-17
+
+### Fixed — Deep Design Extraction (critical)
+- **Depth limit**: default 4 → 10 levels deep (was losing ~40% content). Support `depth: "full"` for unlimited
+- **Truncated node summaries**: when depth limit hit, nodes now include `textContent` (all text within) and `iconNames` (all icon names within) instead of empty `children: []`
+- **`get_selection`** also supports `depth` parameter with default 15
+- **`depth` param** exposed in MCP tool schema — AI can request deeper extraction when needed
+- **`collectTextContent()`** — walks subtree, extracts up to 15 text strings
+- **`collectIconNames()`** — walks subtree, extracts up to 10 icon names
+
+---
+
 ## [1.6.2] — 2026-03-17
 
 ### Improved — Plugin UI Redesign (`plugin/ui.html`)

@@ -43,7 +43,7 @@ export const TOOLS = [
           ],
           description:
             "get_selection: data for currently selected node(s). " +
-            "get_design: full node tree for a frame/page. " +
+            "get_design: full node tree for a frame/page (use depth param to control, default 10, or 'full'). " +
             "get_page_nodes: top-level frames on the current page. " +
             "screenshot: PNG of a node as base64. " +
             "export_svg: SVG markup of a node. " +
@@ -55,6 +55,7 @@ export const TOOLS = [
         nodeId:   { type: "string", description: "Target node ID (optional — omit to use current selection)." },
         nodeName: { type: "string", description: "Target node name (alternative to nodeId)." },
         scale:    { type: "number", description: "Export scale for screenshot (default 1)." },
+        depth:    { type: "string", description: "Tree depth for get_design/get_selection. Number (default 10) or 'full' for unlimited. Higher = more detail but larger output." },
       },
       required: ["operation"],
     },
