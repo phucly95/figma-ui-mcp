@@ -1393,8 +1393,14 @@ handlers.get_node_detail = async function(params) {
     }
   } catch(e) {}
 
-  // Children count
-  if ("children" in node) detail.childCount = node.children.length;
+  // Children count + text content summary
+  if ("children" in node) {
+    detail.childCount = node.children.length;
+    var texts = collectTextContent(node, 20);
+    if (texts.length) detail.textContent = texts;
+    var icons = collectIconNames(node, 10);
+    if (icons.length) detail.iconNames = icons;
+  }
 
   return detail;
 };
