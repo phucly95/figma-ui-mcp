@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.8.0] — 2026-03-18
+
+### Fixed — BLOCKER: export_svg TextDecoder crash
+- Replaced `new TextDecoder()` with manual UTF-8 decoder — Figma sandbox has no TextDecoder
+
+### Added — `export_image` operation
+- Export node as base64 PNG/JPG for saving to disk (scale, format params)
+- Returns `{ base64, format, width, height, nodeId, sizeBytes }`
+
+### Added — `get_node_detail` operation
+- CSS-like properties for single node — no tree traversal needed
+- Includes `css` object with mapped values (flexDirection, justifyContent, alignItems, gap, padding)
+- blendMode, visible, opacity, boxShadow (CSS string), boundVariables
+
+### Improved — Mixed text segments
+- TEXT nodes with mixed styles now return `segments` array with per-run fill, fontWeight, fontSize
+- First segment used as representative for top-level fontFamily/fontWeight/fill
+
+### Improved — Design data extraction
+- Inline SVG for icon nodes in `get_design` (auto-export up to 20 icons, <5KB each)
+- Padding always detailed 4 values + counterAxisSpacing + itemSpacing rename
+- fillOpacity included at all depths when !== 1.0
+- strokes include strokeAlign on all node types
+
+---
+
+## [1.7.3] — 2026-03-18
+
+### Added — `export_image` operation (figma_read)
+- Export any node as base64 PNG/JPG string — for saving images to disk
+- Supports `format` param ("png" default, "jpg") and `scale` param (default 2x)
+- Returns `{ base64, format, width, height, nodeId, nodeName, sizeBytes }`
+- Use case: extract avatars, thumbnails, icons from Figma designs as files
+- Separate from `screenshot` (which displays inline in chat)
+
+---
+
 ## [1.7.2] — 2026-03-18
 
 ### Fixed — BLOCKER: export_svg TextDecoder crash

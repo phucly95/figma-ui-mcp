@@ -291,18 +291,71 @@ function extractDesignTree(node, depth, maxDepth) {
       if (node.textTruncation && node.textTruncation !== "DISABLED") info.textTruncation = node.textTruncation;
       if (node.textAutoResize) info.textAutoResize = node.textAutoResize;
     } catch(e) {
-      // Mixed text styles — extract per-segment
+      // Mixed text styles — extract per-segment with style runs
       try {
         info.content = node.characters;
         info.fill = getFillHex(node);
-        if (node.characters.length > 0) {
-          var rs = node.getRangeFontName(0, 1);
-          if (rs) { info.fontFamily = rs.family; info.fontWeight = rs.style; }
-          info.fontSize = node.getRangeFontSize(0, 1);
-          try { var rfill = node.getRangeFills(0, 1); if (rfill && rfill[0] && rfill[0].type === "SOLID") info.fill = rgbToHex(rfill[0].color); } catch(e3) {}
-        }
         info.textAlign = node.textAlignHorizontal;
         info.mixedStyles = true;
+
+        // Extract style segments
+        if (node.characters.length > 0) {
+          var segments = [];
+          var text = node.characters;
+          var segStart = 0;
+
+          for (var si = 0; si <= text.length; si++) {
+            if (si === text.length || si > segStart) {
+              // Check if style changed at this position
+              var changed = (si === text.length);
+              if (!changed && si > 0) {
+                try {
+                  var prevFont = node.getRangeFontName(si - 1, si);
+                  var curFont = node.getRangeFontName(si, si + 1);
+                  var prevSize = node.getRangeFontSize(si - 1, si);
+                  var curSize = node.getRangeFontSize(si, si + 1);
+                  if (prevFont.family !== curFont.family || prevFont.style !== curFont.style || prevSize !== curSize) changed = true;
+                  // Check fill change
+                  try {
+                    var prevFills = node.getRangeFills(si - 1, si);
+                    var curFills = node.getRangeFills(si, si + 1);
+                    if (prevFills[0] && curFills[0] && prevFills[0].type === "SOLID" && curFills[0].type === "SOLID") {
+                      if (rgbToHex(prevFills[0].color) !== rgbToHex(curFills[0].color)) changed = true;
+                    }
+                  } catch(e4) {}
+                } catch(e5) {}
+              }
+
+              if (changed && segStart < si) {
+                var seg = { text: text.substring(segStart, si) };
+                try {
+                  var sFont = node.getRangeFontName(segStart, segStart + 1);
+                  seg.fontFamily = sFont.family;
+                  seg.fontWeight = sFont.style;
+                  seg.fontSize = node.getRangeFontSize(segStart, segStart + 1);
+                  var sFills = node.getRangeFills(segStart, segStart + 1);
+                  if (sFills && sFills[0] && sFills[0].type === "SOLID") seg.fill = rgbToHex(sFills[0].color);
+                } catch(e6) {}
+                segments.push(seg);
+                segStart = si;
+              }
+            }
+          }
+
+          if (segments.length > 1) {
+            info.segments = segments;
+            // Use first segment as representative
+            info.fontFamily = segments[0].fontFamily;
+            info.fontWeight = segments[0].fontWeight;
+            info.fontSize = segments[0].fontSize;
+            info.fill = segments[0].fill;
+          } else if (segments.length === 1) {
+            info.fontFamily = segments[0].fontFamily;
+            info.fontWeight = segments[0].fontWeight;
+            info.fontSize = segments[0].fontSize;
+            info.fill = segments[0].fill;
+          }
+        }
       } catch(e2) { info.content = node.characters || ""; }
     }
   }
@@ -1162,6 +1215,50 @@ handlers.export_svg = async function(params) {
   return { svg: svg, nodeId: node.id, width: Math.round(node.width), height: Math.round(node.height) };
 };
 
+// export_image — export node as base64 PNG/JPG (for saving to disk, not for inline display)
+handlers.export_image = async function(params) {
+  var id = params ? params.id : null;
+  var nodeName = params ? params.name : null;
+  var format = (params && params.format) ? params.format.toUpperCase() : "PNG";
+  var scale = (params && params.scale) ? params.scale : 2;
+
+  if (format !== "PNG" && format !== "JPG") format = "PNG";
+
+  var node = null;
+  if (id) node = findNodeById(id);
+  if (!node && nodeName) {
+    node = figma.currentPage.findOne(function(n) { return n.name === nodeName; });
+  }
+  if (!node) throw new Error("Node not found for export");
+
+  var bytes = await node.exportAsync({ format: format, constraint: { type: "SCALE", value: scale } });
+  var arr = (typeof Uint8Array !== "undefined" && !(bytes instanceof Uint8Array)) ? new Uint8Array(bytes) : bytes;
+
+  // Manual base64 encode (Figma sandbox has no btoa)
+  var CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  var b64 = "";
+  var len = arr.length;
+  for (var j = 0; j < len; j += 3) {
+    var b0 = arr[j];
+    var b1 = j + 1 < len ? arr[j + 1] : 0;
+    var b2 = j + 2 < len ? arr[j + 2] : 0;
+    b64 += CHARS[b0 >> 2];
+    b64 += CHARS[((b0 & 3) << 4) | (b1 >> 4)];
+    b64 += j + 1 < len ? CHARS[((b1 & 15) << 2) | (b2 >> 6)] : "=";
+    b64 += j + 2 < len ? CHARS[b2 & 63] : "=";
+  }
+
+  return {
+    base64: b64,
+    format: format.toLowerCase(),
+    width: Math.round(node.width * scale),
+    height: Math.round(node.height * scale),
+    nodeId: node.id,
+    nodeName: node.name,
+    sizeBytes: len,
+  };
+};
+
 // ─── NEW READ OPERATIONS ─────────────────────────────────────────────────────
 
 // get_styles — read all local paint, text, effect, and grid styles
@@ -1223,8 +1320,10 @@ handlers.get_node_detail = async function(params) {
     }
   } catch(e) {}
 
-  // Opacity
+  // Opacity, blendMode, visible
   try { if (node.opacity !== undefined && node.opacity !== 1) detail.opacity = Math.round(node.opacity * 100) / 100; } catch(e) {}
+  try { if (node.blendMode && node.blendMode !== "NORMAL" && node.blendMode !== "PASS_THROUGH") detail.blendMode = node.blendMode; } catch(e) {}
+  try { if ("visible" in node && !node.visible) detail.visible = false; } catch(e) {}
 
   // Effects → CSS boxShadow
   try {
@@ -1247,12 +1346,15 @@ handlers.get_node_detail = async function(params) {
   // Layout / padding
   try {
     if (node.layoutMode && node.layoutMode !== "NONE") {
-      detail.display = "flex";
-      detail.flexDirection = node.layoutMode === "HORIZONTAL" ? "row" : "column";
-      detail.gap = node.itemSpacing + "px";
-      detail.alignItems = node.counterAxisAlignItems;
-      detail.justifyContent = node.primaryAxisAlignItems;
-      detail.padding = node.paddingTop + "px " + node.paddingRight + "px " + node.paddingBottom + "px " + node.paddingLeft + "px";
+      var alignMap = { "MIN": "flex-start", "CENTER": "center", "MAX": "flex-end", "SPACE_BETWEEN": "space-between" };
+      detail.css = {
+        display: "flex",
+        flexDirection: node.layoutMode === "HORIZONTAL" ? "row" : "column",
+        gap: node.itemSpacing + "px",
+        alignItems: alignMap[node.counterAxisAlignItems] || node.counterAxisAlignItems,
+        justifyContent: alignMap[node.primaryAxisAlignItems] || node.primaryAxisAlignItems,
+        padding: node.paddingTop + "px " + node.paddingRight + "px " + node.paddingBottom + "px " + node.paddingLeft + "px",
+      };
     }
   } catch(e) {}
 

@@ -159,7 +159,7 @@ server.setRequestHandler(CallToolRequestSchema, async ({ params: { name, argumen
       if (!health.pluginConnected) return notConnected();
     } else if (!bridge.isPluginConnected()) return notConnected();
 
-    const { operation, nodeId, nodeName, scale, depth } = args || {};
+    const { operation, nodeId, nodeName, scale, depth, format } = args || {};
     if (!operation) return err("'operation' is required.");
 
     const params = {};
@@ -167,6 +167,7 @@ server.setRequestHandler(CallToolRequestSchema, async ({ params: { name, argumen
     if (nodeName) params.name  = nodeName;
     if (scale)    params.scale = scale;
     if (depth !== undefined) params.depth = depth;
+    if (format) params.format = format;
 
     try {
       const data = await bridge.sendOperation(operation, params);

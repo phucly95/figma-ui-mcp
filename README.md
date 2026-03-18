@@ -327,6 +327,8 @@ figma-ui-mcp/
 | `get_page_nodes` | Top-level frames on the current page |
 | `screenshot` | Export node as PNG — displays **inline** in Claude Code |
 | `export_svg` | Export node as SVG markup |
+| `export_image` | Export node as base64 PNG/JPG — for saving to disk (`format`, `scale` params) |
+| `get_node_detail` | CSS-like properties for single node (no tree traversal) |
 | `get_styles` | All local paint, text, effect, grid styles |
 | `get_local_components` | Component listing with descriptions + variant properties |
 | `get_viewport` | Current viewport position, zoom, bounds |

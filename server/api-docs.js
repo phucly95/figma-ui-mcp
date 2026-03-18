@@ -522,6 +522,82 @@ await figma.instantiate({ componentId: comp.id, parentId: screen.id, x: 100, y: 
 await figma.instantiate({ componentName: "btn/primary", parentId: screen.id, x: 100, y: 200 });
 \`\`\`
 
+## export_image — Export node as base64 PNG/JPG (for saving to disk)
+
+\`\`\`js
+// Export avatar at 2x scale as PNG
+figma_read({ operation: "export_image", nodeId: "89:209", scale: 2, format: "png" })
+// → { base64: "iVBORw0KGgo...", format: "png", width: 128, height: 128, nodeId: "89:209", sizeBytes: 4521 }
+
+// Save to file: echo "<base64>" | base64 -d > avatar.png
+
+// Export as JPG
+figma_read({ operation: "export_image", nodeId: "89:209", format: "jpg", scale: 1 })
+\`\`\`
+
+**screenshot vs export_image:**
+| | screenshot | export_image |
+|---|-----------|-------------|
+| **Purpose** | Visual preview in chat | Save asset to disk |
+| **Output** | Inline image in Claude Code | base64 text string |
+| **Format** | PNG only | PNG or JPG |
+| **Scale** | default 1x | default 2x |
+| **Use case** | "Show me the frame" | "Extract this avatar/icon/thumbnail" |
+
+## get_node_detail — CSS-like properties for a single node
+
+Query one node by ID or name. Returns CSS-mapped properties without tree traversal.
+Much faster than parsing full \`get_design\` output to find one node.
+
+\`\`\`js
+figma_read({ operation: "get_node_detail", nodeId: "89:393" })
+// → {
+//   id: "89:393", name: "Header", type: "FRAME",
+//   x: 0, y: 0, width: 440, height: 56,
+//   fills: [{ type: "SOLID", color: "#FFFFFF" }],
+//   stroke: "#E7EAF0", strokeWeight: 1, strokeAlign: "INSIDE",
+//   borderRadius: "0px",
+//   opacity: 1,
+//   boxShadow: "0px 1px 3px 0px rgba(0,0,0,0.1)",
+//   css: {
+//     display: "flex", flexDirection: "row",
+//     gap: "8px", alignItems: "center", justifyContent: "space-between",
+//     padding: "8px 16px 8px 16px"
+//   },
+//   childCount: 3,
+//   boundVariables: { fills: "VariableID:57:671" }
+// }
+\`\`\`
+
+**TEXT node returns additional properties:**
+\`\`\`js
+figma_read({ operation: "get_node_detail", nodeId: "89:348" })
+// → {
+//   content: "8 đ 83 token",
+//   color: "#1E3150",
+//   fontSize: "14px", fontFamily: "Inter", fontWeight: "Semi Bold",
+//   lineHeight: "20px", letterSpacing: "-0.2px",
+//   textAlign: "left"
+// }
+\`\`\`
+
+## Mixed Text Segments
+
+TEXT nodes with multiple styles return a \`segments\` array:
+\`\`\`js
+// Input: "8 đ 83 token" where "8 đ" is bold and "83 token" is regular
+// Output in get_design / get_selection:
+{
+  "type": "TEXT",
+  "content": "8 đ 83 token",
+  "mixedStyles": true,
+  "segments": [
+    { "text": "8 đ", "fill": "#1E3150", "fontWeight": "Bold", "fontSize": 14 },
+    { "text": "83 token", "fill": "#8E9AAD", "fontWeight": "Regular", "fontSize": 14 }
+  ]
+}
+\`\`\`
+
 ---
 
 ## AUTO LAYOUT (PREFERRED for centering — NON-NEGOTIABLE for complex containers)
