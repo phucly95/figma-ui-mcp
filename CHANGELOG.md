@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.7.0] — 2026-03-18
+
+### Added — Design Token Operations (6 new handlers)
+- **`createVariableCollection`** — create named variable collections ("Colors", "Spacing")
+- **`createVariable`** — create COLOR/FLOAT/STRING/BOOLEAN variables with initial values. Supports hex color auto-conversion
+- **`applyVariable`** — bind variable to node fill/stroke/opacity/cornerRadius. Changes variable once → all bound nodes update
+- **`createPaintStyle`** — create reusable local paint styles with name + hex color
+- **`createTextStyle`** — create reusable text styles with font family, weight, size, line height, letter spacing
+- **`createComponent`** — convert FRAME/GROUP into reusable Figma component
+
+### Updated
+- `server/code-executor.js` — registered all new + existing operations in WRITE_OPS and READ_OPS
+- `server/tool-definitions.js` — figma_write description includes Design Token operations
+
+### Workflow enabled
+```
+createVariableCollection("Colors")
+→ createVariable("accent-blue", "#2563EB", collection)
+→ createVariable("bg-base", "#08090E", collection)
+→ create card frame
+→ applyVariable(cardId, "fill", "bg-base")
+→ change variable value once → all nodes auto-update
+```
+
+---
+
 ## [1.6.5] — 2026-03-17
 
 ### Added — New Design Rules (inspired by HeroUI design system)

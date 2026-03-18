@@ -1242,6 +1242,231 @@ handlers.get_variables = async function() {
   return { collections: collections };
 };
 
+// ─── DESIGN TOKEN OPERATIONS (v1.7.0) ───────────────────────────────────────
+
+// createVariableCollection — create a new variable collection
+handlers.createVariableCollection = async function(params) {
+  var name = params.name;
+  if (!name) throw new Error("Collection name is required");
+
+  var collection = figma.variables.createVariableCollection(name);
+  return {
+    id: collection.id,
+    name: collection.name,
+    modes: collection.modes.map(function(m) { return { id: m.modeId, name: m.name }; }),
+  };
+};
+
+// createVariable — create a variable in a collection
+// Supports COLOR, FLOAT, STRING, BOOLEAN
+handlers.createVariable = async function(params) {
+  var name = params.name;
+  var collectionId = params.collectionId;
+  var resolvedType = params.resolvedType || "COLOR";
+  var value = params.value;
+
+  if (!name) throw new Error("Variable name is required");
+  if (!collectionId) throw new Error("collectionId is required");
+
+  // Find collection
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = null;
+  for (var i = 0; i < collections.length; i++) {
+    if (collections[i].id === collectionId || collections[i].name === collectionId) {
+      collection = collections[i];
+      break;
+    }
+  }
+  if (!collection) throw new Error("Collection not found: " + collectionId);
+
+  var variable = figma.variables.createVariable(name, collection, resolvedType);
+
+  // Set value for default mode
+  var modeId = collection.modes[0].modeId;
+  if (resolvedType === "COLOR" && typeof value === "string") {
+    // Convert hex to RGBA
+    var rgb = hexToRgb(value);
+    variable.setValueForMode(modeId, { r: rgb.r, g: rgb.g, b: rgb.b, a: 1 });
+  } else if (value !== undefined) {
+    variable.setValueForMode(modeId, value);
+  }
+
+  return {
+    id: variable.id,
+    name: variable.name,
+    resolvedType: variable.resolvedType,
+    collectionId: collection.id,
+  };
+};
+
+// applyVariable — bind a variable to a node property (fill, stroke, etc.)
+handlers.applyVariable = async function(params) {
+  var nodeId = params.nodeId || params.id;
+  var variableId = params.variableId;
+  var variableName = params.variableName;
+  var field = params.field || "fill"; // fill, stroke, opacity, cornerRadius, etc.
+
+  if (!nodeId) throw new Error("nodeId is required");
+  if (!variableId && !variableName) throw new Error("variableId or variableName is required");
+
+  var node = findNodeById(nodeId);
+  if (!node) throw new Error("Node not found: " + nodeId);
+
+  // Find variable by ID or name
+  var variable = null;
+  if (variableId) {
+    variable = await figma.variables.getVariableByIdAsync(variableId);
+  }
+  if (!variable && variableName) {
+    var allCollections = await figma.variables.getLocalVariableCollectionsAsync();
+    for (var ci = 0; ci < allCollections.length && !variable; ci++) {
+      var col = allCollections[ci];
+      for (var vi = 0; vi < col.variableIds.length && !variable; vi++) {
+        var v = await figma.variables.getVariableByIdAsync(col.variableIds[vi]);
+        if (v && v.name === variableName) variable = v;
+      }
+    }
+  }
+  if (!variable) throw new Error("Variable not found: " + (variableId || variableName));
+
+  // Map field names to Figma setBoundVariable fields
+  var fieldMap = {
+    "fill": "fills",
+    "fills": "fills",
+    "stroke": "strokes",
+    "strokes": "strokes",
+    "opacity": "opacity",
+    "cornerRadius": "topLeftRadius",
+    "width": "width",
+    "height": "height",
+  };
+
+  var figmaField = fieldMap[field] || field;
+
+  if (figmaField === "fills" || figmaField === "strokes") {
+    // For fills/strokes, bind to the first solid paint
+    var paints = figmaField === "fills" ? node.fills : node.strokes;
+    if (!paints || paints.length === 0) {
+      // Create a solid fill first
+      var newPaint = { type: "SOLID", color: { r: 0, g: 0, b: 0 } };
+      if (figmaField === "fills") node.fills = [newPaint];
+      else node.strokes = [newPaint];
+    }
+    var paintsCopy = JSON.parse(JSON.stringify(figmaField === "fills" ? node.fills : node.strokes));
+    paintsCopy[0] = figma.variables.setBoundVariableForPaint(paintsCopy[0], "color", variable);
+    if (figmaField === "fills") node.fills = paintsCopy;
+    else node.strokes = paintsCopy;
+  } else {
+    node.setBoundVariable(figmaField, variable);
+  }
+
+  return {
+    nodeId: node.id,
+    nodeName: node.name,
+    field: field,
+    variableId: variable.id,
+    variableName: variable.name,
+  };
+};
+
+// createPaintStyle — create a reusable local paint style
+handlers.createPaintStyle = async function(params) {
+  var name = params.name;
+  var color = params.color; // hex string
+  var description = params.description || "";
+
+  if (!name) throw new Error("Style name is required");
+  if (!color) throw new Error("Color hex is required");
+
+  var style = figma.createPaintStyle();
+  style.name = name;
+  style.description = description;
+  style.paints = [{ type: "SOLID", color: hexToRgb(color) }];
+
+  return {
+    id: style.id,
+    name: style.name,
+    key: style.key,
+    color: color,
+  };
+};
+
+// createTextStyle — create a reusable local text style
+handlers.createTextStyle = async function(params) {
+  var name = params.name;
+  var fontFamily = params.fontFamily || "Inter";
+  var fontWeight = params.fontWeight || "Regular";
+  var fontSize = params.fontSize || 14;
+  var lineHeight = params.lineHeight;
+  var letterSpacing = params.letterSpacing;
+  var description = params.description || "";
+
+  if (!name) throw new Error("Style name is required");
+
+  var style = figma.createTextStyle();
+  style.name = name;
+  style.description = description;
+
+  // Map weight names to Figma font style strings
+  var weightMap = FONT_STYLE_MAP;
+  var figmaStyle = weightMap[fontWeight] || fontWeight;
+
+  await figma.loadFontAsync({ family: fontFamily, style: figmaStyle });
+  style.fontName = { family: fontFamily, style: figmaStyle };
+  style.fontSize = fontSize;
+
+  if (lineHeight !== undefined) {
+    if (lineHeight === "auto") {
+      style.lineHeight = { unit: "AUTO" };
+    } else if (typeof lineHeight === "string" && lineHeight.indexOf("%") !== -1) {
+      style.lineHeight = { unit: "PERCENT", value: parseFloat(lineHeight) };
+    } else {
+      style.lineHeight = { unit: "PIXELS", value: Number(lineHeight) };
+    }
+  }
+
+  if (letterSpacing !== undefined) {
+    style.letterSpacing = { unit: "PIXELS", value: Number(letterSpacing) };
+  }
+
+  return {
+    id: style.id,
+    name: style.name,
+    key: style.key,
+    fontFamily: fontFamily,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+  };
+};
+
+// createComponent — convert an existing frame/group into a reusable component
+handlers.createComponent = async function(params) {
+  var nodeId = params.nodeId || params.id;
+  var name = params.name;
+
+  if (!nodeId) throw new Error("nodeId of the frame to convert is required");
+
+  var node = findNodeById(nodeId);
+  if (!node) throw new Error("Node not found: " + nodeId);
+
+  var component;
+  if (node.type === "FRAME" || node.type === "GROUP") {
+    component = figma.createComponentFromNode(node);
+  } else {
+    throw new Error("Can only convert FRAME or GROUP to component, got: " + node.type);
+  }
+
+  if (name) component.name = name;
+
+  return {
+    id: component.id,
+    name: component.name,
+    key: component.key,
+    width: Math.round(component.width),
+    height: Math.round(component.height),
+  };
+};
+
 // ─── NEW WRITE OPERATIONS ────────────────────────────────────────────────────
 
 // clone — duplicate a node

@@ -14,11 +14,18 @@ const WRITE_OPS = [
   "query", "create", "modify", "delete", "append",
   "listComponents", "instantiate",
   "ensure_library", "get_library_tokens",
+  // Design token operations (v1.7.0)
+  "createVariableCollection", "createVariable", "applyVariable",
+  "createPaintStyle", "createTextStyle", "createComponent",
+  // Node operations
+  "clone", "group", "ungroup", "flatten", "resize",
+  "set_selection", "set_viewport", "batch",
 ];
 
 const READ_OPS = [
   "get_selection", "get_design", "get_page_nodes",
   "screenshot", "export_svg",
+  "get_styles", "get_local_components", "get_viewport", "get_variables",
 ];
 
 const ALL_OPS = [...WRITE_OPS, ...READ_OPS];
