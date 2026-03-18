@@ -306,6 +306,8 @@ figma-ui-mcp/
 | `figma.applyVariable({ nodeId, field, variableName })` | Bind variable to node fill/stroke/opacity |
 | `figma.createPaintStyle({ name, color })` | Create reusable paint style |
 | `figma.createTextStyle({ name, fontFamily, fontSize, ... })` | Create reusable text style |
+| `figma.modifyVariable({ variableName, value })` | Change variable value — all bound nodes update instantly |
+| `figma.setupDesignTokens({ colors, numbers })` | Bootstrap complete token system in one call (idempotent) |
 | `figma.ensure_library()` | Create/get Design Library frame |
 | `figma.get_library_tokens()` | Read library color + text tokens |
 

@@ -16,6 +16,7 @@ const WRITE_OPS = [
   "ensure_library", "get_library_tokens",
   // Design token operations (v1.7.0)
   "createVariableCollection", "createVariable", "applyVariable",
+  "modifyVariable", "setupDesignTokens",
   "createPaintStyle", "createTextStyle", "createComponent",
   // Node operations
   "clone", "group", "ungroup", "flatten", "resize",

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.1] — 2026-03-18
+
+### Added — New Handlers (`plugin/code.js`)
+- **`modifyVariable`** — change value of an existing variable by name or ID. Supports COLOR (hex), FLOAT, STRING, BOOLEAN. All bound nodes update instantly
+- **`setupDesignTokens`** — bootstrap complete design token system in one call (idempotent). Creates collection + color/number variables, skips existing, updates values
+
+### Improved — Design Data Extraction (`plugin/code.js`)
+- **Bound Variables** — `extractDesignTree` now reads `node.boundVariables` and includes variable binding IDs in output (shows which tokens are applied to each node)
+
+### Updated — API Docs (`server/api-docs.js`)
+- **Rule 0 — Token-First Workflow** (HIGHEST PRIORITY): mandatory `setupDesignTokens` bootstrap before any design, never hardcode hex colors
+- **Rule 0b — Component-First Workflow**: never draw same element twice, create Component → instantiate
+- Full reference for `setupDesignTokens`, `modifyVariable`, `applyVariable`, `createComponent` with examples
+- Updated Rule 1 to integrate with token-first workflow
+
+### Updated — Code Executor (`server/code-executor.js`)
+- Added `modifyVariable`, `setupDesignTokens` to WRITE_OPS
+
+---
+
 ## [1.7.0] — 2026-03-18
 
 ### Added — Design Token Operations (6 new handlers)

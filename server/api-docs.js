@@ -5,23 +5,110 @@ export const DOCS = `
 
 ## ⚑ MANDATORY DESIGN SYSTEM RULES (read before every design task)
 
+### Rule 0 — Token-First Workflow (HIGHEST PRIORITY — NON-NEGOTIABLE)
+**NEVER hardcode hex colors in \`fill\` or \`stroke\`.** Always use Figma Variables (Design Tokens).
+
+**Before ANY design work, run this bootstrap sequence:**
+\`\`\`js
+// 1. Bootstrap all tokens in one call (idempotent — safe to call every time)
+var tokens = await figma.setupDesignTokens({
+  collectionName: "Design Tokens",
+  colors: {
+    "accent":         "#3B82F6",
+    "accent-dim":     "#1D4ED8",
+    "bg-base":        "#08090E",
+    "bg-surface":     "#0F1117",
+    "bg-card":        "#111318",
+    "bg-elevated":    "#0D0F14",
+    "border":         "#1E2030",
+    "text-primary":   "#F0F2F5",
+    "text-secondary": "#8B8FA3",
+    "text-muted":     "#555872",
+    "positive":       "#00DC82",
+    "negative":       "#FF4757",
+    "warning":        "#FFB547",
+  },
+  numbers: {
+    "radius-sm": 8, "radius-md": 12, "radius-lg": 16,
+    "spacing-xs": 4, "spacing-sm": 8, "spacing-md": 16, "spacing-lg": 24,
+  }
+});
+// Returns { collectionId, created: [...], updated: [...], totalVariables }
+
+// 2. Read variable IDs for use in applyVariable
+var vars = await figma.get_variables();
+// Build a lookup map: name → variableId
+var varMap = {};
+for (var ci = 0; ci < vars.collections.length; ci++) {
+  for (var vi = 0; vi < vars.collections[ci].variables.length; vi++) {
+    var v = vars.collections[ci].variables[vi];
+    varMap[v.name] = v.id;
+  }
+}
+// Now varMap["accent"] = "VariableID:xx:yy"
+\`\`\`
+
+**Then for EVERY node you create:**
+\`\`\`js
+// WRONG — hardcoded hex
+await figma.create({ type: "FRAME", fill: "#3B82F6", ... });
+
+// CORRECT — create with hex, then bind variable
+var node = await figma.create({ type: "FRAME", fill: "#3B82F6", ... });
+await figma.applyVariable({ nodeId: node.id, field: "fill", variableId: varMap["accent"] });
+\`\`\`
+
+**To change a color globally (all bound nodes update instantly):**
+\`\`\`js
+await figma.modifyVariable({ variableName: "accent", value: "#0EA5E9" });
+// → ALL nodes bound to "accent" update to #0EA5E9 automatically!
+\`\`\`
+
+### Rule 0b — Component-First Workflow (MANDATORY for repeated elements)
+**NEVER draw the same element twice.** Create a Component, then instantiate it.
+
+**Workflow:**
+\`\`\`js
+// 1. Check if component exists
+var components = await figma.listComponents();
+var btnExists = components.some(function(c) { return c.name === "btn/primary"; });
+
+// 2. If not → create frame, convert to component
+if (!btnExists) {
+  var btnFrame = await figma.create({
+    type: "FRAME", name: "btn/primary",
+    width: 120, height: 40, fill: "#3B82F6", cornerRadius: 10,
+    layoutMode: "HORIZONTAL", primaryAxisAlignItems: "CENTER", counterAxisAlignItems: "CENTER"
+  });
+  await figma.create({ type: "TEXT", parentId: btnFrame.id, content: "Button", fontSize: 14, fontWeight: "SemiBold", fill: "#FFFFFF" });
+  await figma.applyVariable({ nodeId: btnFrame.id, field: "fill", variableId: varMap["accent"] });
+  var comp = await figma.createComponent({ nodeId: btnFrame.id, name: "btn/primary" });
+  // comp.id is now a reusable component
+}
+
+// 3. Use instances everywhere (changes to component → all instances update)
+await figma.instantiate({ componentName: "btn/primary", parentId: screen.id, x: 100, y: 200 });
+await figma.instantiate({ componentName: "btn/primary", parentId: screen.id, x: 300, y: 200 });
+\`\`\`
+
+**Must create as Components:** buttons, badges (LONG/SHORT/status), nav items, stat cards, table headers, pagination.
+**Must use Variables:** ALL colors, ALL spacing, ALL border radius.
+
 ### Rule 1 — Design Library Frame
 Before drawing any new design, ALWAYS:
-1. Call \`figma.get_page_nodes()\` to check if a frame named **"🎨 Design Library"** exists on the current page
-2. If it does NOT exist → call \`figma.ensure_library()\` to create it
-3. If it exists → call \`figma.get_library_tokens()\` to read existing colors, text styles, and components
-4. ONLY use colors, font sizes, and component patterns already defined in the library
-5. If you need a new color or text style not in the library → add it to "🎨 Design Library" FIRST, then use it
+1. Run \`setupDesignTokens\` (Rule 0) to bootstrap variables
+2. Call \`figma.get_page_nodes()\` to check if "🎨 Design Library" frame exists
+3. If not → \`figma.ensure_library()\` to create visual reference
+4. The Design Library frame is a **visual reference only** — actual tokens live in Figma Variables
+5. When adding new colors → add to \`setupDesignTokens\` colors param AND to library frame
 
 ### Rule 2 — Library Frame Structure
 The "🎨 Design Library" frame lives at x: -2000, y: 0 (off-canvas, never on-screen).
 It contains labeled sections:
-- **Colors** — rectangles named "color/{name}" with the hex fill
+- **Colors** — rectangles named "color/{name}" with the hex fill (visual reference)
 - **Text Styles** — text nodes named "text/{role}" (e.g. text/heading-xl, text/body-sm)
-- **Buttons** — frames named "btn/{variant}" (e.g. btn/primary, btn/danger)
-- **Badges** — frames named "badge/{variant}"
-- **Inputs** — frames named "input/{state}"
-- **Cards** — frames named "card/{variant}"
+- **Components** — component instances showing all reusable elements
+- **Variables** — the REAL tokens live in Figma Variables panel, NOT in this frame
 
 ### Rule 3 — Read selection when user refers to a frame
 When user says "this frame", "the selected one", "bạn thấy không", "cái đang chọn":
@@ -375,6 +462,64 @@ const lib = await figma.ensure_library();
 \`\`\`js
 // Returns { colors: [{name, hex}], textStyles: [{name, fontSize, fontWeight, fill}] }
 const tokens = await figma.get_library_tokens();
+\`\`\`
+
+## setupDesignTokens — Bootstrap complete token system (idempotent)
+
+\`\`\`js
+// Creates collection + variables. Skips existing, updates values if name matches.
+const result = await figma.setupDesignTokens({
+  collectionName: "Design Tokens",     // name of variable collection
+  colors: {                            // COLOR variables
+    "accent": "#3B82F6",
+    "bg-base": "#08090E",
+    "positive": "#00DC82",
+  },
+  numbers: {                           // FLOAT variables (spacing, radius)
+    "spacing-md": 16,
+    "radius-md": 12,
+  }
+});
+// → { collectionId, collectionName, created: [{name, id, type}], updated: [...], totalVariables }
+\`\`\`
+
+## modifyVariable — Change variable value (propagates to all bound nodes)
+
+\`\`\`js
+// By name (searches all collections)
+await figma.modifyVariable({ variableName: "accent", value: "#0EA5E9" });
+
+// By ID (faster, no search)
+await figma.modifyVariable({ variableId: "VariableID:57:671", value: "#FF6B35" });
+
+// Works for all types: COLOR (hex), FLOAT (number), STRING, BOOLEAN
+await figma.modifyVariable({ variableName: "spacing-md", value: 20 });
+// → { id, name, resolvedType, newValue }
+\`\`\`
+
+## applyVariable — Bind a variable to a node property
+
+\`\`\`js
+// Bind accent color to a frame's fill
+await figma.applyVariable({ nodeId: "49:115", field: "fill", variableId: "VariableID:57:671" });
+
+// Bind by variable name (slower, searches all collections)
+await figma.applyVariable({ nodeId: "49:115", field: "fill", variableName: "accent" });
+
+// Supported fields: fill, stroke, opacity, cornerRadius, width, height
+// → { nodeId, nodeName, field, variableId, variableName }
+\`\`\`
+
+## createComponent — Convert frame to reusable component
+
+\`\`\`js
+var comp = await figma.createComponent({ nodeId: "49:200", name: "btn/primary" });
+// → { id, name, key, width, height }
+
+// Then instantiate anywhere:
+await figma.instantiate({ componentId: comp.id, parentId: screen.id, x: 100, y: 200 });
+// Or by name:
+await figma.instantiate({ componentName: "btn/primary", parentId: screen.id, x: 100, y: 200 });
 \`\`\`
 
 ---

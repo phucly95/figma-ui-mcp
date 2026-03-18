@@ -232,6 +232,27 @@ function extractDesignTree(node, depth, maxDepth) {
   try { if ("blendMode" in node && node.blendMode !== "NORMAL" && node.blendMode !== "PASS_THROUGH") info.blendMode = node.blendMode; } catch(e) {}
   try { if ("clipsContent" in node && node.clipsContent) info.clipsContent = true; } catch(e) {}
 
+  // ── Bound Variables (Design Tokens) ──
+  try {
+    if (node.boundVariables) {
+      var bv = {};
+      var bvKeys = Object.keys(node.boundVariables);
+      for (var bvi = 0; bvi < bvKeys.length; bvi++) {
+        var bvk = bvKeys[bvi];
+        var binding = node.boundVariables[bvk];
+        if (binding) {
+          // binding can be a single VariableAlias or array of them
+          if (Array.isArray(binding)) {
+            bv[bvk] = binding.map(function(b) { return b ? b.id : null; });
+          } else {
+            bv[bvk] = binding.id || null;
+          }
+        }
+      }
+      if (Object.keys(bv).length > 0) info.boundVariables = bv;
+    }
+  } catch(e) {}
+
   // ── Effects (shadows, blurs) ──
   try {
     if ("effects" in node && node.effects && node.effects.length) {
@@ -1344,15 +1365,20 @@ handlers.applyVariable = async function(params) {
   var figmaField = fieldMap[field] || field;
 
   if (figmaField === "fills" || figmaField === "strokes") {
-    // For fills/strokes, bind to the first solid paint
-    var paints = figmaField === "fills" ? node.fills : node.strokes;
-    if (!paints || paints.length === 0) {
-      // Create a solid fill first
-      var newPaint = { type: "SOLID", color: { r: 0, g: 0, b: 0 } };
-      if (figmaField === "fills") node.fills = [newPaint];
-      else node.strokes = [newPaint];
+    // For fills/strokes, bind variable to the first solid paint
+    var currentPaints = figmaField === "fills" ? node.fills : node.strokes;
+    if (!currentPaints || currentPaints.length === 0) {
+      // Create a solid fill first so we have something to bind to
+      currentPaints = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }];
     }
-    var paintsCopy = JSON.parse(JSON.stringify(figmaField === "fills" ? node.fills : node.strokes));
+    // Clone paints array (Figma requires setting the full array)
+    var paintsCopy = [];
+    for (var pi = 0; pi < currentPaints.length; pi++) {
+      paintsCopy.push(Object.assign({}, currentPaints[pi]));
+      if (currentPaints[pi].color) {
+        paintsCopy[pi].color = Object.assign({}, currentPaints[pi].color);
+      }
+    }
     paintsCopy[0] = figma.variables.setBoundVariableForPaint(paintsCopy[0], "color", variable);
     if (figmaField === "fills") node.fills = paintsCopy;
     else node.strokes = paintsCopy;
@@ -1464,6 +1490,134 @@ handlers.createComponent = async function(params) {
     key: component.key,
     width: Math.round(component.width),
     height: Math.round(component.height),
+  };
+};
+
+// modifyVariable — change the value of an existing variable
+handlers.modifyVariable = async function(params) {
+  var variableId = params.variableId;
+  var variableName = params.variableName;
+  var value = params.value; // hex color string for COLOR type, number for FLOAT
+
+  if (!variableId && !variableName) throw new Error("variableId or variableName is required");
+  if (value === undefined) throw new Error("value is required");
+
+  // Find variable
+  var variable = null;
+  if (variableId) {
+    variable = await figma.variables.getVariableByIdAsync(variableId);
+  }
+  if (!variable && variableName) {
+    var allCollections = await figma.variables.getLocalVariableCollectionsAsync();
+    for (var ci = 0; ci < allCollections.length && !variable; ci++) {
+      var col = allCollections[ci];
+      for (var vi = 0; vi < col.variableIds.length && !variable; vi++) {
+        var v = await figma.variables.getVariableByIdAsync(col.variableIds[vi]);
+        if (v && v.name === variableName) variable = v;
+      }
+    }
+  }
+  if (!variable) throw new Error("Variable not found: " + (variableId || variableName));
+
+  // Get the collection to find mode ID
+  var collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+  var modeId = collection.modes[0].modeId;
+
+  // Set value based on type
+  if (variable.resolvedType === "COLOR") {
+    var hex = value.replace("#", "");
+    var r = parseInt(hex.substring(0, 2), 16) / 255;
+    var g = parseInt(hex.substring(2, 4), 16) / 255;
+    var b = parseInt(hex.substring(4, 6), 16) / 255;
+    variable.setValueForMode(modeId, { r: r, g: g, b: b, a: 1 });
+  } else if (variable.resolvedType === "FLOAT") {
+    variable.setValueForMode(modeId, Number(value));
+  } else if (variable.resolvedType === "STRING") {
+    variable.setValueForMode(modeId, String(value));
+  } else if (variable.resolvedType === "BOOLEAN") {
+    variable.setValueForMode(modeId, Boolean(value));
+  }
+
+  return {
+    id: variable.id,
+    name: variable.name,
+    resolvedType: variable.resolvedType,
+    newValue: value,
+  };
+};
+
+// setupDesignTokens — bootstrap a complete design token system in one call
+// Creates variable collection + all color/spacing variables if they don't exist
+// Idempotent: skips existing variables, only adds missing ones
+handlers.setupDesignTokens = async function(params) {
+  var collectionName = params.collectionName || "Design Tokens";
+  var colors = params.colors || {};   // { "accent": "#3B82F6", "bg-base": "#08090E", ... }
+  var numbers = params.numbers || {}; // { "spacing-sm": 8, "radius-md": 12, ... }
+
+  // Find or create collection
+  var collection = null;
+  var allCollections = await figma.variables.getLocalVariableCollectionsAsync();
+  for (var ci = 0; ci < allCollections.length; ci++) {
+    if (allCollections[ci].name === collectionName) {
+      collection = allCollections[ci];
+      break;
+    }
+  }
+  if (!collection) {
+    collection = figma.variables.createVariableCollection(collectionName);
+  }
+
+  // Read existing variables in this collection
+  var existing = {};
+  for (var vi = 0; vi < collection.variableIds.length; vi++) {
+    var v = await figma.variables.getVariableByIdAsync(collection.variableIds[vi]);
+    if (v) existing[v.name] = v;
+  }
+
+  var modeId = collection.modes[0].modeId;
+  var created = [];
+  var skipped = [];
+
+  // Create color variables
+  var colorNames = Object.keys(colors);
+  for (var i = 0; i < colorNames.length; i++) {
+    var name = colorNames[i];
+    var hex = colors[name].replace("#", "");
+    var r = parseInt(hex.substring(0, 2), 16) / 255;
+    var g = parseInt(hex.substring(2, 4), 16) / 255;
+    var b = parseInt(hex.substring(4, 6), 16) / 255;
+
+    if (existing[name]) {
+      // Update existing variable value
+      existing[name].setValueForMode(modeId, { r: r, g: g, b: b, a: 1 });
+      skipped.push(name);
+    } else {
+      var cv = figma.variables.createVariable(name, collection, "COLOR");
+      cv.setValueForMode(modeId, { r: r, g: g, b: b, a: 1 });
+      created.push({ name: name, id: cv.id, type: "COLOR" });
+    }
+  }
+
+  // Create number variables (spacing, radius, etc.)
+  var numNames = Object.keys(numbers);
+  for (var i = 0; i < numNames.length; i++) {
+    var name = numNames[i];
+    if (existing[name]) {
+      existing[name].setValueForMode(modeId, Number(numbers[name]));
+      skipped.push(name);
+    } else {
+      var nv = figma.variables.createVariable(name, collection, "FLOAT");
+      nv.setValueForMode(modeId, Number(numbers[name]));
+      created.push({ name: name, id: nv.id, type: "FLOAT" });
+    }
+  }
+
+  return {
+    collectionId: collection.id,
+    collectionName: collection.name,
+    created: created,
+    updated: skipped,
+    totalVariables: collection.variableIds.length,
   };
 };
 
