@@ -236,12 +236,14 @@
         } catch (e) {
           consecutiveErrors++;
           var backoff = getBackoff();
-          if (consecutiveErrors <= 3) {
-            setStatus("yellow", "Reconnecting (" + consecutiveErrors + "/3)");
+          if (consecutiveErrors <= 5) {
+            setStatus("yellow", "Waiting for MCP server... (" + consecutiveErrors + ")");
+          } else if (consecutiveErrors <= 10) {
+            setStatus("yellow", "Still waiting — first run may take 15s to download");
           } else {
-            setStatus("red", "Offline — retry " + Math.round(backoff/1000) + "s");
+            setStatus("red", "Cannot connect — run: npx figma-ui-mcp");
           }
-          if (consecutiveErrors === 1) log("Connection lost — retrying", "err");
+          if (consecutiveErrors === 1) log("Connecting to bridge — if first run, npx is downloading...", "info");
           await sleep(backoff);
           continue;
         }
