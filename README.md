@@ -159,6 +159,8 @@ npm install
 ```
 </details>
 
+> **⚠️ IMPORTANT: After adding the MCP server, you MUST restart your IDE / AI client (quit and reopen).** The MCP server only loads on startup — simply saving the config file is not enough. This applies to Claude Code, Cursor, VS Code, Windsurf, and Antigravity.
+
 ### Step 2 — Run the Figma plugin
 
 1. Open **Figma Desktop** (required — web app cannot access localhost)
