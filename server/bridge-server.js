@@ -2,7 +2,8 @@
 import http from "node:http";
 
 export const CONFIG = {
-  PORT: 38451,
+  PORT: parseInt(process.env.FIGMA_MCP_PORT || "38451", 10),
+  PORT_RANGE: 10,           // try up to 10 ports (38451-38460)
   HOST: null,               // null = Node.js binds :: (dual-stack IPv4+IPv6), accepts localhost on both
   OP_TIMEOUT_MS: 10_000,    // per-operation timeout
   MAX_BODY_BYTES: 5_000_000,  // 5MB to support image payloads
@@ -90,6 +91,21 @@ export class BridgeServer {
 
     const path = new URL(req.url, `http://localhost:${CONFIG.PORT}`).pathname;
 
+    // Root — welcome + status (so curl http://localhost:38451 works)
+    if (path === "/" && req.method === "GET") {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        server: "figma-ui-mcp",
+        version: "1.8.3",
+        port: this.#actualPort,
+        pluginConnected: this.isPluginConnected(),
+        lastPollAgoMs: this.#lastPollAt ? Date.now() - this.#lastPollAt : null,
+        queueLength: this.queueLength,
+        endpoints: ["/health", "/poll", "/response", "/exec", "/clear"],
+      }));
+      return;
+    }
+
     // Plugin → pick up queued operations (auto-clean expired requests)
     if (path === "/poll" && req.method === "GET") {
       this.#lastPollAt = Date.now();
@@ -152,26 +168,35 @@ export class BridgeServer {
     res.end(JSON.stringify({ error: "Not found" }));
   }
 
+  get port() { return this.#actualPort; }
+  #actualPort = CONFIG.PORT;
+
   start() {
-    this.#server = http.createServer((req, res) => this.#route(req, res));
-    this.#server.on("error", err => {
-      if (err.code === "EADDRINUSE") {
-        process.stderr.write(`[figma-ui-mcp] Port ${CONFIG.PORT} in use — killing old process and retrying...\n`);
-        // Try to reclaim the port
-        import("node:child_process").then(cp => {
-          cp.execSync(`lsof -ti :${CONFIG.PORT} | xargs kill -9 2>/dev/null || true`);
-          setTimeout(() => {
-            this.#server.listen(CONFIG.PORT, CONFIG.HOST);
-          }, 1000);
-        }).catch(() => {
-          process.stderr.write(`[figma-ui-mcp] Could not reclaim port ${CONFIG.PORT}. Kill the old process manually.\n`);
+    return new Promise((resolve) => {
+      const tryPort = (port, attempt) => {
+        if (attempt >= CONFIG.PORT_RANGE) {
+          process.stderr.write(`[figma-ui-mcp] All ports ${CONFIG.PORT}-${CONFIG.PORT + CONFIG.PORT_RANGE - 1} in use.\n`);
+          resolve(this);
+          return;
+        }
+        this.#server = http.createServer((req, res) => this.#route(req, res));
+        this.#server.once("error", err => {
+          if (err.code === "EADDRINUSE") {
+            process.stderr.write(`[figma-ui-mcp] Port ${port} in use — trying ${port + 1}...\n`);
+            tryPort(port + 1, attempt + 1);
+          } else {
+            process.stderr.write(`[figma-ui-mcp bridge] ${err.message}\n`);
+            resolve(this);
+          }
         });
-      } else {
-        process.stderr.write(`[figma-ui-mcp bridge] ${err.message}\n`);
-      }
+        this.#server.once("listening", () => {
+          this.#actualPort = port;
+          resolve(this);
+        });
+        this.#server.listen(port, CONFIG.HOST);
+      };
+      tryPort(CONFIG.PORT, 0);
     });
-    this.#server.listen(CONFIG.PORT, CONFIG.HOST);
-    return this;
   }
 
   stop() {

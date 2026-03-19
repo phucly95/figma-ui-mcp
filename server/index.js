@@ -68,14 +68,12 @@ const httpProxy = {
 
 // Try starting own bridge; if port taken, use HTTP proxy
 try {
-  bridge = new BridgeServer().start();
-  // Wait briefly to see if it actually bound
-  await new Promise(r => setTimeout(r, 200));
-  process.stderr.write("[figma-ui-mcp] Bridge started on port " + CONFIG.PORT + "\n");
+  bridge = await new BridgeServer().start();
+  process.stderr.write("[figma-ui-mcp] Bridge started on port " + bridge.port + "\n");
 } catch (e) {
   useHttpProxy = true;
   bridge = httpProxy;
-  process.stderr.write("[figma-ui-mcp] Port " + CONFIG.PORT + " in use, connecting to existing bridge\n");
+  process.stderr.write("[figma-ui-mcp] Bridge failed, connecting to existing bridge on port " + CONFIG.PORT + "\n");
 }
 
 // Also check: if bridge started but the "error" event fired (EADDRINUSE), switch to proxy
@@ -120,7 +118,7 @@ server.setRequestHandler(CallToolRequestSchema, async ({ params: { name, argumen
       content: [{
         type: "text",
         text: JSON.stringify({
-          bridgePort:      CONFIG.PORT,
+          bridgePort:      bridge.port || CONFIG.PORT,
           pluginConnected: connected,
           pluginInfo,
           mode:            useHttpProxy ? "http-proxy" : "direct",

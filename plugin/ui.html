@@ -133,7 +133,7 @@
     </div>
     <div>
       <h1>Figma UI MCP Bridge</h1>
-      <p>AI-powered design bridge · port 38451</p>
+      <p>AI-powered design bridge · port <span id="port-display" onclick="changePort()" style="cursor:pointer;text-decoration:underline dotted;color:#7c5bf5" title="Click to change port">38451</span></p>
     </div>
   </header>
 
@@ -160,7 +160,8 @@
   </div>
 
   <script>
-    var BRIDGE  = "http://localhost:38451";
+    var currentPort = 38451;
+    var BRIDGE  = "http://localhost:" + currentPort;
     var POLL_MS = 900;
     var POLL_MAX_MS = 5000;
     var consecutiveErrors = 0;
@@ -252,6 +253,18 @@
       consecutiveErrors = 0;
       setStatus("yellow", "Reconnecting...");
       setTimeout(function() { polling = true; poll(); }, 300);
+    }
+
+    function changePort() {
+      var input = prompt("Enter bridge port (default 38451):", currentPort);
+      if (!input) return;
+      var newPort = parseInt(input, 10);
+      if (isNaN(newPort) || newPort < 1024 || newPort > 65535) { alert("Invalid port"); return; }
+      currentPort = newPort;
+      BRIDGE = "http://localhost:" + currentPort;
+      document.getElementById("port-display").textContent = currentPort;
+      log("Port changed to " + currentPort, "info");
+      reconnect();
     }
 
     window.onmessage = async function(event) {
