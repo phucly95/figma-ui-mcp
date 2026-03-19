@@ -156,6 +156,7 @@
 
   <div class="btn-row">
     <button onclick="clearLog()">Clear</button>
+    <button onclick="autoDetectPort()">Auto-detect</button>
     <button class="primary" onclick="reconnect()">Reconnect</button>
   </div>
 
@@ -260,11 +261,35 @@
       if (!input) return;
       var newPort = parseInt(input, 10);
       if (isNaN(newPort) || newPort < 1024 || newPort > 65535) { alert("Invalid port"); return; }
-      currentPort = newPort;
+      setPort(newPort);
+    }
+
+    function setPort(port) {
+      currentPort = port;
       BRIDGE = "http://localhost:" + currentPort;
       document.getElementById("port-display").textContent = currentPort;
-      log("Port changed to " + currentPort, "info");
+      log("Port set to " + currentPort, "info");
       reconnect();
+    }
+
+    async function autoDetectPort() {
+      setStatus("yellow", "Scanning ports...");
+      log("Scanning 38451-38460...", "info");
+      for (var p = 38451; p <= 38460; p++) {
+        try {
+          var res = await fetch("http://localhost:" + p + "/health", { signal: AbortSignal.timeout(500) });
+          if (res.ok) {
+            var data = await res.json();
+            if (data.pluginConnected !== undefined) {
+              log("Found bridge on port " + p + (data.pluginConnected ? " (plugin connected)" : " (no plugin)"), "ok");
+              setPort(p);
+              return;
+            }
+          }
+        } catch(e) { /* port not responding */ }
+      }
+      log("No bridge found on 38451-38460. Reset to 38451.", "err");
+      setPort(38451);
     }
 
     window.onmessage = async function(event) {
