@@ -20,12 +20,17 @@
     "plugin/icon32.png"
   ],
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "build": "esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/server.mjs --minify",
+    "start:dist": "node dist/server.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4"
   },
   "engines": { "node": ">=18" },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
   "keywords": ["figma", "mcp", "model-context-protocol", "claude", "ai", "design", "plugin", "figma-plugin", "ui-generation"],
   "license": "MIT",
   "author": "TranHoaiHung",
