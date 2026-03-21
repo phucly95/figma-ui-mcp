@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-#!/usr/bin/env node
 
 // server/index.js
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
