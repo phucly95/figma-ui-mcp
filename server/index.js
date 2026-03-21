@@ -19,6 +19,15 @@ let bridge;
 let useHttpProxy = false;
 
 // HTTP proxy: forwards operations to existing bridge via /exec endpoint
+const REMOTE_HOST = process.env.FIGMA_BRIDGE_HOST || "127.0.0.1";
+const REMOTE_TOKEN = process.env.FIGMA_BRIDGE_TOKEN || null;
+
+function proxyHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  if (REMOTE_TOKEN) h["X-Bridge-Token"] = REMOTE_TOKEN;
+  return h;
+}
+
 const httpProxy = {
   isPluginConnected() { return true; }, // delegate health check to actual call
   get queueLength()  { return 0; },
@@ -27,9 +36,9 @@ const httpProxy = {
     return new Promise((resolve, reject) => {
       const payload = JSON.stringify({ operation, params });
       const req = http.request({
-        hostname: "127.0.0.1", port: CONFIG.PORT,
+        hostname: REMOTE_HOST, port: CONFIG.PORT,
         path: "/exec", method: "POST",
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) },
+        headers: proxyHeaders({ "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }),
       }, res => {
         let data = "";
         res.on("data", chunk => data += chunk);
@@ -50,7 +59,7 @@ const httpProxy = {
   async checkHealth() {
     return new Promise((resolve) => {
       const req = http.request({
-        hostname: "127.0.0.1", port: CONFIG.PORT,
+        hostname: REMOTE_HOST, port: CONFIG.PORT,
         path: "/health", method: "GET",
       }, res => {
         let data = "";
@@ -66,27 +75,58 @@ const httpProxy = {
   },
 };
 
-// Try starting own bridge; if port taken, use HTTP proxy
-try {
-  bridge = await new BridgeServer().start();
-  process.stderr.write("[figma-ui-mcp] Bridge started on port " + bridge.port + "\n");
-} catch (e) {
+// ── Bridge connection strategy ─────────────────────────────────────────────
+// Remote mode: If FIGMA_BRIDGE_HOST is set, skip local bridge entirely.
+// Local mode: Try to start own bridge. If port taken, connect via HTTP proxy.
+
+const log = (msg) => process.stderr.write(`[figma-ui-mcp] ${msg}\n`);
+
+log(`Startup diagnostics: FIGMA_BRIDGE_HOST=${process.env.FIGMA_BRIDGE_HOST || "(not set)"}, PORT=${CONFIG.PORT}`);
+
+if (process.env.FIGMA_BRIDGE_HOST) {
+  // Remote mode — bridge runs on the Figma machine
   useHttpProxy = true;
   bridge = httpProxy;
-  process.stderr.write("[figma-ui-mcp] Bridge failed, connecting to existing bridge on port " + CONFIG.PORT + "\n");
-}
+  log(`Remote bridge mode: ${REMOTE_HOST}:${CONFIG.PORT}`);
 
-// Also check: if bridge started but the "error" event fired (EADDRINUSE), switch to proxy
-// The BridgeServer.start() doesn't throw on EADDRINUSE, it logs to stderr. So we check health.
-if (!useHttpProxy) {
+  // Startup ping — verify remote bridge is reachable
+  const t0 = Date.now();
   const health = await httpProxy.checkHealth();
-  if (health.pluginConnected && !bridge.isPluginConnected()) {
-    // Another bridge is running and connected to plugin, but ours isn't
+  const latency = Date.now() - t0;
+  if (health.pluginConnected) {
+    log(`✓ Remote bridge reachable (${latency}ms), plugin connected`);
+  } else {
+    log(`✗ Remote bridge ping result (${latency}ms): pluginConnected=${health.pluginConnected}`);
+    if (latency >= 1900) {
+      log(`  → Bridge may be unreachable (timeout). Check FIGMA_BRIDGE_HOST=${REMOTE_HOST} and port ${CONFIG.PORT}`);
+    } else {
+      log(`  → Bridge reachable but Figma plugin not running. Start plugin in Figma Desktop.`);
+    }
+  }
+} else {
+  // Local mode — try starting bridge in same process
+  log("No FIGMA_BRIDGE_HOST set, trying local bridge...");
+  try {
+    bridge = await new BridgeServer().start();
+    log("Bridge started on port " + bridge.port);
+  } catch (e) {
     useHttpProxy = true;
     bridge = httpProxy;
-    process.stderr.write("[figma-ui-mcp] Existing bridge detected with plugin connected, using HTTP proxy\n");
+    log("Bridge failed (" + e.message + "), connecting to existing bridge on port " + CONFIG.PORT);
+  }
+
+  // Also check: if bridge started but the "error" event fired (EADDRINUSE), switch to proxy
+  if (!useHttpProxy) {
+    const health = await httpProxy.checkHealth();
+    if (health.pluginConnected && !bridge.isPluginConnected()) {
+      useHttpProxy = true;
+      bridge = httpProxy;
+      log("Existing bridge detected with plugin connected, using HTTP proxy");
+    }
   }
 }
+
+log(`Mode: ${useHttpProxy ? "http-proxy" : "direct"}, bridge ready`);
 
 const server = new Server(
   { name: "figma-ui-mcp", version: "1.0.0" },
