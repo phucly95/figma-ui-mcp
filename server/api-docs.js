@@ -630,7 +630,7 @@ layoutMode: "HORIZONTAL", primaryAxisAlignItems: "CENTER", counterAxisAlignItems
 layoutMode: "HORIZONTAL", primaryAxisAlignItems: "MIN", counterAxisAlignItems: "CENTER", paddingLeft: 16, itemSpacing: 12
 
 // Vertical stack (title + subtitle + button):
-layoutMode: "VERTICAL", primaryAxisAlignItems: "MIN", counterAxisAlignItems: "STRETCH", itemSpacing: 8
+layoutMode: "VERTICAL", primaryAxisAlignItems: "MIN", counterAxisAlignItems: "MIN", itemSpacing: 8
 
 // Centered icon in a circle/square:
 layoutMode: "HORIZONTAL", primaryAxisAlignItems: "CENTER", counterAxisAlignItems: "CENTER"

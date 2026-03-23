@@ -133,7 +133,7 @@
     </div>
     <div>
       <h1>Figma UI MCP Bridge</h1>
-      <p>AI-powered design bridge · port <span id="port-display" onclick="changePort()" style="cursor:pointer;text-decoration:underline dotted;color:#7c5bf5" title="Click to change port">38451</span></p>
+      <p>AI-powered design bridge · <span id="host-display" onclick="changeHost()" style="cursor:pointer;text-decoration:underline dotted;color:#5b8af5" title="Click to change host">localhost</span>:<span id="port-display" onclick="changePort()" style="cursor:pointer;text-decoration:underline dotted;color:#7c5bf5" title="Click to change port">38451</span></p>
     </div>
   </header>
 
@@ -162,10 +162,25 @@
 
   <script>
     var currentPort = 38451;
-    var BRIDGE  = "http://localhost:" + currentPort;
+    var currentHost = 'localhost';
+    var currentToken = '';
+    var BRIDGE  = "http://" + currentHost + ":" + currentPort;
     var POLL_MS = 900;
     var POLL_MAX_MS = 5000;
     var consecutiveErrors = 0;
+
+    // Init display
+    document.getElementById('host-display').textContent = currentHost;
+    document.getElementById('port-display').textContent = currentPort;
+
+    // Centralized fetch with optional auth header
+    function bridgeFetch(path, opts) {
+      opts = opts || {};
+      if (currentToken) {
+        opts.headers = Object.assign({}, opts.headers || {}, { 'X-Bridge-Token': currentToken });
+      }
+      return fetch(BRIDGE + path, opts);
+    }
 
     var writeCount = 0, readCount = 0, errCount = 0;
     var polling = true;
@@ -202,7 +217,7 @@
 
     async function sendResponse(id, success, data, error) {
       try {
-        await fetch(BRIDGE + "/response", {
+        await bridgeFetch("/response", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: id, success: success, data: data !== undefined ? data : null, error: error !== undefined ? error : null })
@@ -219,7 +234,7 @@
     async function poll() {
       while (polling) {
         try {
-          var res = await fetch(BRIDGE + "/poll", { signal: AbortSignal.timeout(5000) });
+          var res = await bridgeFetch("/poll", { signal: AbortSignal.timeout(5000) });
           if (!res.ok) { setStatus("yellow", "Bridge not responding"); consecutiveErrors++; await sleep(getBackoff()); continue; }
 
           var body = await res.json();
@@ -258,6 +273,16 @@
       setTimeout(function() { polling = true; poll(); }, 300);
     }
 
+    function changeHost() {
+      var input = prompt("Enter bridge host (IP or hostname):", currentHost);
+      if (!input) return;
+      currentHost = input.trim();
+      BRIDGE = "http://" + currentHost + ":" + currentPort;
+      document.getElementById("host-display").textContent = currentHost;
+      log("Host set to " + currentHost, "info");
+      reconnect();
+    }
+
     function changePort() {
       var input = prompt("Enter bridge port (default 38451):", currentPort);
       if (!input) return;
@@ -268,7 +293,7 @@
 
     function setPort(port) {
       currentPort = port;
-      BRIDGE = "http://localhost:" + currentPort;
+      BRIDGE = "http://" + currentHost + ":" + currentPort;
       document.getElementById("port-display").textContent = currentPort;
       log("Port set to " + currentPort, "info");
       reconnect();
@@ -276,10 +301,10 @@
 
     async function autoDetectPort() {
       setStatus("yellow", "Scanning ports...");
-      log("Scanning 38451-38460...", "info");
+      log("Scanning " + currentHost + ":38451-38460...", "info");
       for (var p = 38451; p <= 38460; p++) {
         try {
-          var res = await fetch("http://localhost:" + p + "/health", { signal: AbortSignal.timeout(500) });
+          var res = await fetch("http://" + currentHost + ":" + p + "/health", { signal: AbortSignal.timeout(500) });
           if (res.ok) {
             var data = await res.json();
             if (data.pluginConnected !== undefined) {
@@ -290,7 +315,7 @@
           }
         } catch(e) { /* port not responding */ }
       }
-      log("No bridge found on 38451-38460. Reset to 38451.", "err");
+      log("No bridge found on " + currentHost + ":38451-38460. Reset to 38451.", "err");
       setPort(38451);
     }
 

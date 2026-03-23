@@ -4,11 +4,12 @@ import http from "node:http";
 export const CONFIG = {
   PORT: parseInt(process.env.FIGMA_MCP_PORT || "38451", 10),
   PORT_RANGE: 10,           // try up to 10 ports (38451-38460)
-  HOST: null,               // null = Node.js binds :: (dual-stack IPv4+IPv6), accepts localhost on both
+  HOST: process.env.FIGMA_BRIDGE_HOST || null, // null = Node.js binds :: (dual-stack). Set to Tailscale IP for remote.
   OP_TIMEOUT_MS: 30_000,    // per-operation timeout (was 10s, too short for first-run font loading + large exports)
   MAX_BODY_BYTES: 5_000_000,  // 5MB to support image payloads
   MAX_QUEUE: 50,
   HEALTH_TTL_MS: 60_000,    // plugin considered offline after 60s without poll (was 30s, plugin may be busy processing)
+  AUTH_TOKEN: process.env.FIGMA_BRIDGE_TOKEN || null, // shared secret for remote auth (null = no auth)
 };
 
 export class BridgeServer {
@@ -85,6 +86,16 @@ export class BridgeServer {
     res.setHeader("X-Content-Type-Options",       "nosniff");
   }
 
+  // Auth check — returns false (and sends 401) if token is required but missing/wrong
+  #checkAuth(req, res) {
+    if (!CONFIG.AUTH_TOKEN) return true; // no token configured = no auth (local dev)
+    const token = req.headers['x-bridge-token'];
+    if (token === CONFIG.AUTH_TOKEN) return true;
+    res.writeHead(401);
+    res.end(JSON.stringify({ error: "Unauthorized — X-Bridge-Token header missing or invalid" }));
+    return false;
+  }
+
   #route(req, res) {
     this.#headers(res);
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
@@ -108,6 +119,7 @@ export class BridgeServer {
 
     // Plugin → pick up queued operations (auto-clean expired requests)
     if (path === "/poll" && req.method === "GET") {
+      if (!this.#checkAuth(req, res)) return;
       this.#lastPollAt = Date.now();
       // Filter out requests whose pending already timed out
       const alive = this.#requestQueue.filter(r => this.#pending.has(r.id));
@@ -119,6 +131,7 @@ export class BridgeServer {
 
     // Plugin → return operation result
     if (path === "/response" && req.method === "POST") {
+      if (!this.#checkAuth(req, res)) return;
       this.#readJson(req)
         .then(body => { this.#settle(body); res.writeHead(200); res.end(JSON.stringify({ ok: true })); })
         .catch(err  => { res.writeHead(400); res.end(JSON.stringify({ error: err.message })); });
@@ -128,6 +141,7 @@ export class BridgeServer {
     // Direct HTTP execution — allows any HTTP client to send operations without MCP layer
     // POST /exec { operation, params } → waits for plugin response (max 10s)
     if (path === "/exec" && req.method === "POST") {
+      if (!this.#checkAuth(req, res)) return;
       this.#readJson(req)
         .then(async body => {
           if (!this.isPluginConnected()) {
@@ -158,6 +172,7 @@ export class BridgeServer {
 
     // Manual queue clear — unstick when requests are stuck
     if (path === "/clear" && (req.method === "POST" || req.method === "GET")) {
+      if (!this.#checkAuth(req, res)) return;
       const cleared = this.clearQueue();
       res.writeHead(200);
       res.end(JSON.stringify({ cleared, queueLength: 0, pendingCount: 0 }));

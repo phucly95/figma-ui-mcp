@@ -7,7 +7,13 @@
   "documentAccess": "dynamic-page",
   "editorType": ["figma", "dev"],
   "networkAccess": {
-    "allowedDomains": ["http://localhost:38451"],
-    "reasoning": "This plugin bridges Figma to a local MCP server running on port 38451. All communication stays on localhost — no external network access is made."
+    "allowedDomains": [
+      "http://localhost:38451",
+      "http://localhost:38452",
+      "http://localhost:38453",
+      "http://localhost:38454",
+      "http://localhost:38455"
+    ],
+    "reasoning": "Plugin connects to bridge server on localhost. Multiple ports listed to support auto-port-finding."
   }
 }

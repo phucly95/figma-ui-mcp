@@ -1,236 +1,83 @@
-# figma-ui-mcp
+# figma-ui-mcp (Remote Bridge)
 
-<p align="center">
-  <img src="assets/logo-v6.png" alt="figma-ui-mcp" width="480" />
-</p>
+Bidirectional Figma MCP — AI agents draw UI directly in Figma and read designs back as structured data.
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/figma-ui-mcp"><img src="https://img.shields.io/npm/v/figma-ui-mcp?color=blue" alt="npm version" /></a>
-  <a href="https://registry.modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-Registry-purple" alt="MCP Registry" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/TranHoaiHung/figma-ui-mcp/stargazers"><img src="https://img.shields.io/github/stars/TranHoaiHung/figma-ui-mcp?style=social" alt="GitHub stars" /></a>
-</p>
-
-**Bidirectional Figma MCP** — use Claude (or any MCP client) to draw UI directly in Figma, and read existing designs back as structured data or code.
-
-> **Requires Figma Desktop** — the plugin communicates with the MCP server over `localhost` HTTP polling. Figma's web app does not allow localhost network access, so **Figma Desktop is required**.
+Forked and customized for **remote control** via Tailscale: agents on a headless server control Figma Desktop on a separate machine.
 
 ```
-Claude ──figma_write──▶ MCP Server ──HTTP (localhost:38451)──▶ Figma Plugin ──▶ Figma Document
-Claude ◀─figma_read──── MCP Server ◀──HTTP (localhost:38451)── Figma Plugin ◀── Figma Document
+Ubuntu Server (Jarvis)                    MacBook / PC
+┌────────────────────────┐                ┌───────────────────────────┐
+│ Agent ──► MCP Server   │── Tailscale ──▶│ Bridge Server (38451)     │
+│   (FIGMA_BRIDGE_HOST)  │   encrypted    │   └── Figma Plugin ◄──►  │
+└────────────────────────┘                │       Figma Desktop       │
+                                          └───────────────────────────┘
 ```
-
-### How the localhost bridge works
-
-The MCP server starts a small HTTP server bound to `localhost:38451`. The Figma plugin (running inside Figma Desktop) polls this server every 500 ms to pick up queued operations and post results back. All traffic stays on your machine — nothing is sent to any external server.
-
-This approach is necessary because Figma plugins run in a sandboxed iframe and cannot use stdio or WebSocket to talk to a local process directly. HTTP polling over localhost is the only supported method for a Figma plugin to communicate with a local tool.
 
 ---
 
-## Features
+## Setup
 
-| Direction | Tool | What it does |
-|-----------|------|-------------|
-| Write | `figma_write` | Draw frames, shapes, text on any page via JS code |
-| Read  | `figma_read`  | Extract node trees, colors, typography, screenshots |
-| Info  | `figma_status`| Check plugin connection status |
-| Docs  | `figma_docs`  | Get full API reference + examples |
-
----
-
-## Quick Start
-
-### Step 1 — Add the MCP server to your AI client
-
-Choose your platform:
-
-<details>
-<summary><strong>Claude Code (CLI)</strong></summary>
+### 1. Máy Figma (MacBook / PC)
 
 ```bash
-# Project scope (default)
-claude mcp add figma-ui-mcp -- npx figma-ui-mcp
+# Clone & install
+git clone <repo-url> figma-ui-mcp
+cd figma-ui-mcp && npm install
 
-# Global scope (all projects)
-claude mcp add --scope user figma-ui-mcp -- npx figma-ui-mcp
+# Start standalone bridge
+node server/bridge-standalone.js
 ```
-</details>
 
-<details>
-<summary><strong>Claude Desktop</strong></summary>
+Load plugin trong Figma Desktop:
 
-Edit config file:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+1. Mở **Figma Desktop** (bắt buộc — web app không hỗ trợ)
+2. **Plugins → Development → Import plugin from manifest...**
+3. Chọn `plugin/manifest.json`
+4. Chạy **Plugins → Development → Figma UI MCP Bridge**
+5. Thấy **green dot** = connected
 
-```json
-{
-  "mcpServers": {
-    "figma": {
-      "command": "npx",
-      "args": ["-y", "figma-ui-mcp"]
-    }
-  }
-}
-```
-</details>
+> Plugin UI cho phép click vào host/port để thay đổi nếu cần.
 
-<details>
-<summary><strong>Cursor</strong></summary>
-
-Edit `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
-
-```json
-{
-  "mcpServers": {
-    "figma": {
-      "command": "npx",
-      "args": ["-y", "figma-ui-mcp"]
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><strong>VS Code / GitHub Copilot</strong></summary>
-
-Edit `.vscode/mcp.json` (project) or add to `settings.json` (global):
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "figma": {
-        "command": "npx",
-        "args": ["-y", "figma-ui-mcp"]
-      }
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><strong>Windsurf</strong></summary>
-
-Edit `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "figma": {
-      "command": "npx",
-      "args": ["-y", "figma-ui-mcp"]
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><strong>Antigravity (Google)</strong></summary>
-
-1. Open **"..." dropdown** at the top of the agent panel
-2. Click **"Manage MCP Servers"** → **"View raw config"**
-3. Add to `mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "figma": {
-      "command": "npx",
-      "args": ["-y", "figma-ui-mcp"]
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><strong>From source (any client)</strong></summary>
+### 2. Ubuntu Server (Jarvis)
 
 ```bash
-git clone https://github.com/TranHoaiHung/figma-ui-mcp
-cd figma-ui-mcp
-npm install
-# Then point your MCP client to: node /path/to/figma-ui-mcp/server/index.js
+# Copy repo lên server
+scp -r figma-ui-mcp user@server:/opt/figma-ui-mcp
+
+# Set Tailscale IP của máy Figma
+export FIGMA_BRIDGE_HOST=100.x.x.2
 ```
-</details>
 
-> **⚠️ IMPORTANT: After adding the MCP server, you MUST restart your IDE / AI client (quit and reopen).** The MCP server only loads on startup — simply saving the config file is not enough. This applies to Claude Code, Cursor, VS Code, Windsurf, and Antigravity.
+Thêm vào `fastagent.config.yaml`:
 
-### Step 2 — Run the Figma plugin
-
-1. Open **Figma Desktop** (required — web app cannot access localhost)
-2. Go to **Plugins → Development → Import plugin from manifest...**
-3. Select `plugin/manifest.json` from this repo
-4. Run **Plugins → Development → Figma UI MCP Bridge**
-
-The plugin UI shows a **green dot** when the MCP server is connected.
-
-### Step 3 — Start designing with AI
-
-The MCP tools are automatically available in your AI client:
-
-```
-figma_status     — check connection
-figma_write      — draw / modify UI
-figma_read       — extract design data
-figma_docs       — API reference
+```yaml
+figma-ui-mcp:
+  command: "node"
+  args: ["/opt/figma-ui-mcp/server/index.js"]
+  env:
+    FIGMA_BRIDGE_HOST: "${FIGMA_BRIDGE_HOST}"
 ```
 
 ---
 
-## Usage Examples
+## MCP Tools
 
-### Draw a screen
+| Tool | Mô tả |
+|------|--------|
+| `figma_status` | Kiểm tra kết nối plugin |
+| `figma_write` | Vẽ / chỉnh sửa UI bằng JavaScript code |
+| `figma_read` | Đọc design tree, colors, typography, screenshots |
+| `figma_docs` | Xem API reference đầy đủ |
 
-Ask Claude: *"Draw a dark dashboard with a sidebar, header, and 4 KPI cards"*
+---
 
-Claude calls `figma_write` with code like:
+## Environment Variables
 
-```js
-await figma.createPage({ name: "Dashboard" });
-await figma.setPage({ name: "Dashboard" });
-
-const root = await figma.create({
-  type: "FRAME", name: "Dashboard",
-  x: 0, y: 0, width: 1440, height: 900,
-  fill: "#0f172a",
-});
-
-const sidebar = await figma.create({
-  type: "FRAME", name: "Sidebar",
-  parentId: root.id,
-  x: 0, y: 0, width: 240, height: 900,
-  fill: "#1e293b", stroke: "#334155", strokeWeight: 1,
-});
-
-await figma.create({
-  type: "TEXT", name: "App Name",
-  parentId: sidebar.id,
-  x: 20, y: 24, content: "My App",
-  fontSize: 16, fontWeight: "SemiBold", fill: "#f8fafc",
-});
-// ... continue
-```
-
-### Read a design
-
-Ask Claude: *"Read my selected frame and convert it to Tailwind CSS"*
-
-Claude calls `figma_read` with `operation: "get_selection"`, receives the full node tree,
-then generates corresponding code.
-
-### Screenshot a frame
-
-```
-figma_read  →  operation: "screenshot"  →  nodeId: "123:456"
-```
-
-Returns a base64 PNG Claude can analyze and describe.
+| Variable | Vị trí | Mô tả |
+|----------|--------|--------|
+| `FIGMA_BRIDGE_HOST` | Server (MCP) | Tailscale IP của máy chạy Figma Desktop |
+| `FIGMA_MCP_PORT` | Cả hai | Port cho bridge (default: `38451`) |
+| `FIGMA_BRIDGE_TOKEN` | Cả hai | Optional auth token (không cần nếu dùng Tailscale) |
 
 ---
 
@@ -239,119 +86,25 @@ Returns a base64 PNG Claude can analyze and describe.
 ```
 figma-ui-mcp/
 ├── server/
-│   ├── index.js            MCP server (stdio transport)
-│   ├── bridge-server.js    HTTP bridge on localhost:38451
-│   ├── code-executor.js    VM sandbox — safe JS execution
-│   ├── tool-definitions.js MCP tool schemas
-│   └── api-docs.js         API reference text
+│   ├── index.js              MCP server (stdio) — chạy trên Ubuntu
+│   ├── bridge-server.js      HTTP bridge module
+│   ├── bridge-standalone.js  Standalone bridge — chạy trên máy Figma
+│   ├── code-executor.js      VM sandbox cho figma_write
+│   ├── tool-definitions.js   MCP tool schemas
+│   └── api-docs.js           API reference
 └── plugin/
-    ├── manifest.json       Figma plugin manifest
-    ├── code.js             Plugin main — operation handlers
-    └── ui.html             Plugin UI — HTTP polling + status
+    ├── manifest.json          Figma plugin manifest
+    ├── code.js                Plugin main — operation handlers
+    └── ui.html                Plugin UI — HTTP polling + status
 ```
 
-### Security
+### Modes
 
-| Layer | Protection |
-|-------|-----------|
-| VM sandbox | `vm.runInContext()` — blocks `require`, `process`, `fs`, `fetch` |
-| Localhost only | Bridge binds `127.0.0.1:38451`, never exposed to network |
-| Operation allowlist | Only 20 predefined operations accepted |
-| Timeout | 10s VM execution + 10s per plugin operation |
-| Body size limit | 500 KB max per request |
-
----
-
-## Available Write Operations (`figma_write`)
-
-### Core CRUD
-| Operation | Description |
-|-----------|-------------|
-| `figma.create({ type, ... })` | Create FRAME / RECTANGLE / ELLIPSE / LINE / TEXT / SVG / IMAGE |
-| `figma.modify({ id, ... })` | Update node properties (fill, size, text, layout, etc.) |
-| `figma.delete({ id })` | Remove a node |
-| `figma.query({ type?, name?, id? })` | Find nodes by type, name, or ID |
-| `figma.append({ parentId, childId })` | Move node into parent |
-
-### Page Management
-| Operation | Description |
-|-----------|-------------|
-| `figma.status()` | Current Figma context info |
-| `figma.listPages()` | List all pages |
-| `figma.setPage({ name })` | Switch active page |
-| `figma.createPage({ name })` | Add a new page |
-
-### Node Operations
-| Operation | Description |
-|-----------|-------------|
-| `figma.clone({ id, x?, y?, parentId? })` | Duplicate a node with optional repositioning |
-| `figma.group({ nodeIds, name? })` | Group multiple nodes |
-| `figma.ungroup({ id })` | Ungroup a GROUP/FRAME |
-| `figma.flatten({ id })` | Flatten/merge vectors into single path |
-| `figma.resize({ id, width, height })` | Resize any node |
-| `figma.set_selection({ ids })` | Programmatically select nodes |
-| `figma.set_viewport({ nodeId?, x?, y?, zoom? })` | Navigate viewport |
-| `figma.batch({ operations })` | Execute up to 50 ops in one call (10-25x faster) |
-
-### Components
-| Operation | Description |
-|-----------|-------------|
-| `figma.listComponents()` | List all components in document |
-| `figma.instantiate({ componentId })` | Create component instance |
-| `figma.createComponent({ nodeId, name? })` | Convert FRAME/GROUP → reusable Component |
-
-### Design Tokens & Styles
-| Operation | Description |
-|-----------|-------------|
-| `figma.createVariableCollection({ name })` | Create variable collection ("Colors", "Spacing") |
-| `figma.createVariable({ name, collectionId, value })` | Create COLOR/FLOAT/STRING/BOOLEAN variable |
-| `figma.applyVariable({ nodeId, field, variableName })` | Bind variable to node fill/stroke/opacity |
-| `figma.createPaintStyle({ name, color })` | Create reusable paint style |
-| `figma.createTextStyle({ name, fontFamily, fontSize, ... })` | Create reusable text style |
-| `figma.modifyVariable({ variableName, value })` | Change variable value — all bound nodes update instantly |
-| `figma.setupDesignTokens({ colors, numbers })` | Bootstrap complete token system in one call (idempotent) |
-| `figma.ensure_library()` | Create/get Design Library frame |
-| `figma.get_library_tokens()` | Read library color + text tokens |
-
-### Image & Icon Helpers (server-side)
-| Operation | Description |
-|-----------|-------------|
-| `figma.loadImage(url, opts)` | Download image → place on canvas |
-| `figma.loadIcon(name, opts)` | Fetch SVG icon (auto fallback: Fluent → Bootstrap → Phosphor → Lucide) |
-| `figma.loadIconIn(name, opts)` | Icon inside centered circle background |
-
-## Available Read Operations (`figma_read`)
-
-| Operation | Description |
-|-----------|-------------|
-| `get_selection` | Full design tree of selected node(s) + design tokens |
-| `get_design` | Full node tree for a frame/page (depth param: default 10, or "full") |
-| `get_page_nodes` | Top-level frames on the current page |
-| `screenshot` | Export node as PNG — displays **inline** in Claude Code |
-| `export_svg` | Export node as SVG markup |
-| `export_image` | Export node as base64 PNG/JPG — for saving to disk (`format`, `scale` params) |
-| `get_node_detail` | CSS-like properties for single node (no tree traversal) |
-| `get_styles` | All local paint, text, effect, grid styles |
-| `get_local_components` | Component listing with descriptions + variant properties |
-| `get_viewport` | Current viewport position, zoom, bounds |
-| `get_variables` | Local variables (Design Tokens) — collections, modes, values |
-
----
-
-## Star History
-
-If **figma-ui-mcp** helps you, please give it a star — it helps others discover the project!
-
-[![GitHub stars](https://img.shields.io/github/stars/TranHoaiHung/figma-ui-mcp?style=social)](https://github.com/TranHoaiHung/figma-ui-mcp/stargazers)
-
-[![Star History Chart](https://api.star-history.com/svg?repos=TranHoaiHung/figma-ui-mcp&type=Date)](https://star-history.com/#TranHoaiHung/figma-ui-mcp&Date)
+- **Local mode** (default): MCP server + bridge chạy cùng process, plugin poll localhost
+- **Remote mode** (`FIGMA_BRIDGE_HOST` set): MCP server proxy HTTP tới bridge trên máy khác
 
 ---
 
 ## License
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-MIT © [TranHoaiHung](https://github.com/TranHoaiHung) — free to use, modify, and distribute. See [LICENSE](LICENSE) for details.
-
----
+MIT © [TranHoaiHung](https://github.com/TranHoaiHung)
