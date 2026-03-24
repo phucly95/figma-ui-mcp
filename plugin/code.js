@@ -64,8 +64,9 @@ function findNodeByName(name) {
 }
 
 function resolveNode(params) {
-  if (params.id)   return findNodeById(params.id);
-  if (params.name) return findNodeByName(params.name);
+  if (params.id)     return findNodeById(params.id);
+  if (params.nodeId) return findNodeById(params.nodeId);
+  if (params.name)   return findNodeByName(params.name);
   return null;
 }
 
@@ -1032,7 +1033,7 @@ handlers.get_library_tokens = async function() {
 
 // get_selection — returns full design data for current selection (or specified node)
 handlers.get_selection = async function(params) {
-  var id = params ? params.id : null;
+  var id = params ? (params.id || params.nodeId) : null;
   var nodeName = params ? params.name : null;
   var nodes;
   if (id) {
@@ -1378,7 +1379,7 @@ handlers.get_page_nodes = async () => {
 
 // screenshot — export node as PNG base64 (v1.2.5)
 handlers.screenshot = async function(params) {
-  var id = params && params.id ? params.id : null;
+  var id = params ? (params.id || params.nodeId || null) : null;
   var nodeName = params && params.name ? params.name : null;
   var s = params && params.scale ? params.scale : 1;
 
@@ -1483,7 +1484,7 @@ async function exportNodeSvg(node) {
 
 // export_svg — export node as SVG string
 handlers.export_svg = async function(params) {
-  var id = params ? params.id : null;
+  var id = params ? (params.id || params.nodeId) : null;
   var nodeName = params ? params.name : null;
   var node = null;
   if (id) node = findNodeById(id);
@@ -1498,7 +1499,7 @@ handlers.export_svg = async function(params) {
 
 // export_image — export node as base64 PNG/JPG (for saving to disk, not for inline display)
 handlers.export_image = async function(params) {
-  var id = params ? params.id : null;
+  var id = params ? (params.id || params.nodeId) : null;
   var nodeName = params ? params.name : null;
   var format = (params && params.format) ? params.format.toUpperCase() : "PNG";
   var scale = (params && params.scale) ? params.scale : 2;
@@ -1545,7 +1546,7 @@ handlers.export_image = async function(params) {
 // get_styles — read all local paint, text, effect, and grid styles
 // get_node_detail — CSS-like properties for a single node (no tree traversal)
 handlers.get_node_detail = async function(params) {
-  var id = params ? params.id : null;
+  var id = params ? (params.id || params.nodeId) : null;
   var nodeName = params ? params.name : null;
   var node = null;
   if (id) node = findNodeById(id);
