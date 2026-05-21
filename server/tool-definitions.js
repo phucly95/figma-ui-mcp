@@ -51,23 +51,25 @@ export const TOOLS = [
             "get_selection: data for currently selected node(s). " +
             "get_design: full node tree for a frame/page (use depth param to control, default 10, or 'full'). " +
             "get_page_nodes: top-level frames on the current page. " +
-            "screenshot: PNG of a node as base64. " +
-            "export_svg: SVG markup of a node. " +
+            "screenshot: PNG of a node as base64, displayed inline in chat. " +
+            "export_svg: writes node SVG to disk and returns {file_path, byte_size, format, nodeId, width, height}. NEVER returns raw SVG markup — use file_path with filesystem MCP to read or attach. " +
             "get_styles: all local paint, text, effect, grid styles. " +
             "get_local_components: enhanced component listing with properties. " +
             "get_viewport: current viewport position and zoom. " +
             "get_variables: read Figma local variables (Design Tokens). " +
             "get_node_detail: CSS-like properties for a single node (fill, stroke, padding, shadow, font — no tree traversal). " +
-            "export_image: export node as base64 PNG/JPG for saving to disk (use scale param for resolution). " +
+            "export_image: writes node PNG/JPG to disk and returns {file_path, byte_size, format, nodeId, width, height}. NEVER returns raw base64 — use file_path with filesystem MCP to read or attach. " +
             "search_nodes: find nodes by properties — type, namePattern (wildcard), fill (hex), fontFamily, fontSize, hasImage, hasIcon. " +
             "scan_design: progressive scan for large/complex designs — returns structured summary with all text, colors, fonts, images, icons, sections. No token overflow.",
         },
         nodeId:   { type: "string", description: "Target node ID (optional — omit to use current selection)." },
         nodeName: { type: "string", description: "Target node name (alternative to nodeId)." },
-        scale:    { type: "number", description: "Export scale for screenshot (default 1)." },
+        scale:    { type: "number", description: "Export scale for screenshot/export_image (default 1 for screenshot, 2 for export_image)." },
         depth:    { type: "string", description: "Tree depth for get_design/get_selection. Number (default 10) or 'full' for unlimited. Higher = more detail but larger output." },
         format:   { type: "string", description: "Image format for export_image: 'png' (default) or 'jpg'." },
         detail:   { type: "string", description: "Detail level for get_design/get_selection: 'minimal' (~5% tokens), 'compact' (~30%), 'full' (default, 100%). Use minimal for large files." },
+        save_dir: { type: "string", description: "Optional directory for export_svg/export_image output. Default: $TEAM_WORKSPACE/figma-exports/ (or cwd/figma-exports if unset). Must be readable by the filesystem MCP." },
+        save_filename: { type: "string", description: "Optional filename for export_svg/export_image (extension auto-appended if missing). Default: <sanitized-nodeId>-<timestamp>.<ext>." },
       },
       required: ["operation"],
     },

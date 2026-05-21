@@ -522,27 +522,54 @@ await figma.instantiate({ componentId: comp.id, parentId: screen.id, x: 100, y: 
 await figma.instantiate({ componentName: "btn/primary", parentId: screen.id, x: 100, y: 200 });
 \`\`\`
 
-## export_image — Export node as base64 PNG/JPG (for saving to disk)
+## export_svg / export_image — Export node to disk, get file path back
+
+Both operations write the binary/text payload to a file on disk and return ONLY
+metadata + an absolute \`file_path\`. They never return the raw SVG markup or
+base64 — large exports would exhaust the model context window.
+
+Default save location: \`$TEAM_WORKSPACE/figma-exports/<nodeId>-<timestamp>.<ext>\`.
+The agent's filesystem MCP is configured to allow this directory, so the file
+can be read back (e.g. to attach to Jira/Confluence).
 
 \`\`\`js
-// Export avatar at 2x scale as PNG
+// SVG export — vector markup
+figma_read({ operation: "export_svg", nodeId: "423:577" })
+// → { file_path: "/workspace/.../figma-exports/423-577-2026-05-17T....svg",
+//     file_name: "423-577-2026-05-17T11-46-30-000Z.svg",
+//     byte_size: 795423, format: "svg",
+//     nodeId: "423:577", width: 1440, height: 900 }
+
+// PNG export at 2x scale
 figma_read({ operation: "export_image", nodeId: "89:209", scale: 2, format: "png" })
-// → { base64: "iVBORw0KGgo...", format: "png", width: 128, height: 128, nodeId: "89:209", sizeBytes: 4521 }
+// → { file_path: "/workspace/.../figma-exports/89-209-....png",
+//     file_name: "89-209-....png",
+//     byte_size: 4521, format: "png",
+//     nodeId: "89:209", nodeName: "avatar", width: 128, height: 128 }
 
-// Save to file: echo "<base64>" | base64 -d > avatar.png
-
-// Export as JPG
-figma_read({ operation: "export_image", nodeId: "89:209", format: "jpg", scale: 1 })
+// Custom save location/name
+figma_read({
+  operation: "export_image", nodeId: "89:209",
+  save_dir: "/workspace/landing-page/assets",
+  save_filename: "hero-card"  // .png auto-appended
+})
 \`\`\`
 
-**screenshot vs export_image:**
-| | screenshot | export_image |
-|---|-----------|-------------|
-| **Purpose** | Visual preview in chat | Save asset to disk |
-| **Output** | Inline image in Claude Code | base64 text string |
-| **Format** | PNG only | PNG or JPG |
-| **Scale** | default 1x | default 2x |
-| **Use case** | "Show me the frame" | "Extract this avatar/icon/thumbnail" |
+**Attach to Jira/Confluence after export:**
+\`\`\`
+1. figma_read({ operation: "export_image", nodeId: "..." }) → get file_path
+2. jira_upload_attachment({ issue_key: "PROJ-123", file_path: <file_path> })
+   or confluence_upload_attachment({ page_id: "...", file_path: <file_path> })
+\`\`\`
+
+**screenshot vs export_image vs export_svg:**
+| | screenshot | export_image | export_svg |
+|---|-----------|--------------|-----------|
+| **Purpose** | Visual preview in chat | Raster asset to disk | Vector asset to disk |
+| **Output** | Inline image in chat | File path + metadata | File path + metadata |
+| **Format** | PNG only | PNG or JPG | SVG |
+| **Scale** | default 1x | default 2x | n/a (vector) |
+| **Use case** | "Show me the frame" | Extract avatar/icon/thumbnail | Extract logo/icon/illustration |
 
 ## get_node_detail — CSS-like properties for a single node
 

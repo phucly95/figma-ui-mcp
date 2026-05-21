@@ -5,6 +5,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 
 import { BridgeServer, CONFIG } from "./bridge-server.js";
 import { executeCode } from "./code-executor.js";
@@ -128,6 +130,34 @@ if (process.env.FIGMA_BRIDGE_HOST) {
 
 log(`Mode: ${useHttpProxy ? "http-proxy" : "direct"}, bridge ready`);
 
+// ── Export-to-disk helper ──────────────────────────────────────────────────
+// Resolves a directory the agent's filesystem MCP can read: TEAM_WORKSPACE
+// (set by fast-agent isolated_spawner) takes precedence over cwd, because cwd
+// may drift after chdir. Always returns an absolute path. Sanitizes node ID
+// so Windows-style paths don't break on `:`.
+function saveExportToDisk({ ext, buf, nodeId, save_dir, save_filename }) {
+  const base = save_dir && String(save_dir).trim()
+    ? String(save_dir).trim()
+    : path.join(process.env.TEAM_WORKSPACE || process.cwd(), "figma-exports");
+  fs.mkdirSync(base, { recursive: true });
+
+  let fileName = save_filename && String(save_filename).trim()
+    ? String(save_filename).trim()
+    : null;
+  if (!fileName) {
+    const safeId = String(nodeId || "node").replace(/[^A-Za-z0-9_-]+/g, "-");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    fileName = `${safeId}-${ts}.${ext}`;
+  } else if (!fileName.toLowerCase().endsWith(`.${ext}`)) {
+    fileName = `${fileName}.${ext}`;
+  }
+
+  const absPath = path.isAbsolute(fileName) ? fileName : path.join(base, fileName);
+  fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  fs.writeFileSync(absPath, buf);
+  return { absPath, fileName: path.basename(absPath), byteSize: buf.length };
+}
+
 const server = new Server(
   { name: "figma-ui-mcp", version: "1.0.0" },
   { capabilities: { tools: {} } }
@@ -197,7 +227,7 @@ server.setRequestHandler(CallToolRequestSchema, async ({ params: { name, argumen
       if (!health.pluginConnected) return notConnected();
     } else if (!bridge.isPluginConnected()) return notConnected();
 
-    const { operation, nodeId, nodeName, scale, depth, format, detail, ...searchParams } = args || {};
+    const { operation, nodeId, nodeName, scale, depth, format, detail, save_dir, save_filename, ...searchParams } = args || {};
     if (!operation) return err("'operation' is required.");
 
     const params = {};
@@ -224,6 +254,62 @@ server.setRequestHandler(CallToolRequestSchema, async ({ params: { name, argumen
           content.push({ type: "text", text: JSON.stringify(meta, null, 2) });
         }
         return { content: content };
+      }
+
+      // export_svg / export_image: NEVER return raw payload inline (a single
+      // 777KB SVG exhausts the model context window — incident 2026-05-17
+      // Designer "không thấy filesystem MCP"). Persist to disk under the
+      // agent's workspace and return only the file path + minimal metadata.
+      if (operation === "export_svg" && data && typeof data.svg === "string") {
+        const saved = saveExportToDisk({
+          ext: "svg",
+          buf: Buffer.from(data.svg, "utf-8"),
+          nodeId: data.nodeId || nodeId,
+          save_dir,
+          save_filename,
+        });
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              file_path: saved.absPath,
+              file_name: saved.fileName,
+              byte_size: saved.byteSize,
+              format: "svg",
+              nodeId: data.nodeId,
+              width: data.width,
+              height: data.height,
+              hint: "SVG saved to disk. Read with filesystem MCP, then attach via mcp-atlassian (jira_upload_attachment / confluence_upload_attachment).",
+            }, null, 2),
+          }],
+        };
+      }
+
+      if (operation === "export_image" && data && typeof data.base64 === "string") {
+        const ext = (data.format || format || "png").toLowerCase();
+        const saved = saveExportToDisk({
+          ext,
+          buf: Buffer.from(data.base64, "base64"),
+          nodeId: data.nodeId || nodeId,
+          save_dir,
+          save_filename,
+        });
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              file_path: saved.absPath,
+              file_name: saved.fileName,
+              byte_size: saved.byteSize,
+              format: ext,
+              nodeId: data.nodeId,
+              nodeName: data.nodeName,
+              width: data.width,
+              height: data.height,
+              hint: "Image saved to disk. Read with filesystem MCP, then attach via mcp-atlassian.",
+            }, null, 2),
+          }],
+        };
       }
 
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
